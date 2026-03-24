@@ -6,171 +6,123 @@
 <title>Project Hairpin — Scheduler</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=EB+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <style>
-/* ═══ REPLACE THIS URL AFTER DEPLOYING YOUR APPS SCRIPT ═══ */
-:root { --api: ""; }
-
-* { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:'DM Sans','Helvetica Neue',sans-serif; background:#141210; color:#e8e0d6; min-height:100vh; }
-button { font-family:inherit; }
-input, textarea, select { font-family:inherit; }
-
-.header { background:#1a1714; border-bottom:1px solid #2a2520; padding:12px 18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
-.header h1 { font-family:'EB Garamond',Georgia,serif; font-size:20px; font-weight:400; color:#e8d5a0; }
-.header .sub { font-size:9px; color:#8a7e72; text-transform:uppercase; letter-spacing:2px; }
-.hbtn { padding:6px 12px; border-radius:5px; font-size:11px; cursor:pointer; border:1px solid #3a342e; background:none; color:#a09585; }
-.hbtn.gold { border-color:#c49b2a66; background:#c49b2a22; color:#e8d5a0; font-weight:600; }
-.hbtn.red { border-color:#c9404066; background:#c9404011; color:#c94040; }
-
-.main { display:flex; height:calc(100vh - 56px); }
-
-/* LEFT PANEL */
-.left { width:260px; min-width:260px; border-right:1px solid #2a2520; overflow-y:auto; padding:12px; background:#18150f; }
-.left-title { font-size:10px; color:#8a7e72; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; font-weight:600; }
-
-/* SCENE CHIP */
-.chip { border-radius:5px; padding:5px 9px; margin-bottom:4px; cursor:grab; font-size:11px; color:#e8e0d6; transition:all .12s; }
-.chip:hover { transform:scale(1.01); }
-.chip .name { font-weight:600; margin-bottom:1px; }
-.chip .tags { font-size:9px; color:#a09585; display:flex; flex-wrap:wrap; gap:3px; }
-.chip .tags span { background:rgba(255,255,255,.06); border-radius:2px; padding:0 3px; }
-.chip .tags .tod { color:#7aaad4; font-style:italic; background:none; }
-
-/* CALENDAR */
-.cal-wrap { flex:1; overflow-y:auto; padding:14px; }
-.cal-nav { display:flex; justify-content:center; align-items:center; gap:14px; margin-bottom:14px; }
-.cal-nav button { background:none; border:1px solid #3a342e; color:#a09585; width:28px; height:28px; border-radius:5px; cursor:pointer; font-size:14px; }
-.cal-nav h2 { font-family:'EB Garamond',Georgia,serif; font-size:18px; font-weight:400; color:#e8d5a0; min-width:160px; text-align:center; }
-.cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
-.cal-head { text-align:center; font-size:9px; color:#6a5e52; padding:5px 0; text-transform:uppercase; letter-spacing:1px; }
-.cal-day { min-height:85px; border:1px solid rgba(42,37,32,.53); border-radius:5px; padding:4px; cursor:pointer; transition:all .12s; position:relative; }
-.cal-day:hover { border-color:#3a342e; }
-.cal-day.sel { border:1.5px solid #c49b2a; background:#2a2520; }
-.cal-day.we { background:rgba(26,23,20,.53); }
-.cal-day .dnum { display:flex; justify-content:space-between; align-items:center; margin-bottom:2px; }
-.cal-day .dnum span { font-size:11px; font-weight:600; color:#a09585; }
-.cal-day.sel .dnum span { color:#e8d5a0; }
-.cal-day.we .dnum span { color:#6a5e52; }
-.cal-day .badge { font-size:7px; padding:1px 4px; border-radius:8px; font-weight:600; }
-.mini-chip { font-size:9px; padding:2px 4px; margin-bottom:1px; border-radius:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:grab; color:#e8e0d6; }
-
-/* STATS */
-.stats { margin-top:14px; padding:12px; background:rgba(26,23,20,.53); border-radius:7px; border:1px solid #2a2520; display:flex; gap:16px; justify-content:center; flex-wrap:wrap; }
-.stats .s { text-align:center; }
-.stats .s .n { font-size:18px; font-weight:700; }
-.stats .s .l { font-size:8px; color:#8a7e72; text-transform:uppercase; }
-
-/* DAY PANEL */
-.daypanel { position:fixed; right:0; top:0; bottom:0; width:400px; background:#1e1b18; border-left:1px solid #3a342e; z-index:900; overflow-y:auto; box-shadow:-8px 0 32px rgba(0,0,0,.4); display:flex; flex-direction:column; }
-.daypanel .dp-head { padding:16px 20px; border-bottom:1px solid #3a342e; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
-.daypanel .dp-head h2 { font-family:'EB Garamond',Georgia,serif; font-size:18px; color:#e8d5a0; font-weight:400; }
-.daypanel .dp-body { flex:1; overflow-y:auto; padding:16px; }
-.dp-section { font-size:10px; color:#8a7e72; text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; font-weight:600; }
-.dp-callsheet { padding:8px; background:rgba(20,18,16,.53); border-radius:5px; border:1px solid #3a342e; font-size:10px; color:#a09585; line-height:1.6; margin-top:8px; }
-.dp-callsheet strong { color:#c9b896; }
-
-/* RESOURCE SELECTOR */
-.res-box { padding:12px; background:#141210; border-radius:8px; border:1px solid #3a342e; margin-bottom:12px; }
-.res-box .rb-title { font-size:11px; color:#e8d5a0; font-weight:600; margin-bottom:10px; text-transform:uppercase; letter-spacing:1px; }
-.res-box .rb-hint { font-size:10px; color:#8a7e72; margin-bottom:8px; }
-.res-cat { margin-bottom:8px; }
-.res-cat .rc-label { font-size:9px; color:#6a5e52; text-transform:uppercase; margin-bottom:3px; }
-.tog-row { display:flex; flex-wrap:wrap; gap:4px; }
-.tog { padding:4px 10px; border-radius:4px; font-size:11px; cursor:pointer; transition:all .12s; border:1px solid #3a342e; background:#1a1714; color:#8a7e72; }
-.tog.on { border-color:var(--tc,#c49b2a); background:color-mix(in srgb, var(--tc,#c49b2a) 13%, transparent); color:#e8d5a0; }
-
-/* MATCH ITEM */
-.match-item { display:flex; align-items:center; gap:6px; margin-bottom:4px; }
-.match-item .mi-info { flex:1; border-radius:5px; padding:5px 8px; cursor:pointer; }
-.match-item .mi-info .mi-name { font-size:11px; color:#e8e0d6; font-weight:500; }
-.match-item .mi-info .mi-meta { font-size:9px; color:#8a7e72; margin-top:2px; }
-.match-item .mi-add { padding:4px 8px; border-radius:4px; border:1px solid rgba(74,158,110,.27); background:rgba(74,158,110,.07); color:#4a9e6e; font-size:10px; cursor:pointer; font-weight:600; white-space:nowrap; }
-
-/* ASSIGNED SCENE ROW */
-.asgn-row { display:flex; align-items:center; gap:6px; margin-bottom:4px; }
-.asgn-row .ar-info { flex:1; border-radius:5px; padding:5px 8px; cursor:pointer; font-size:11px; color:#e8e0d6; font-weight:500; }
-.asgn-row .ar-rem { padding:3px 7px; border-radius:3px; border:1px solid rgba(201,64,64,.27); background:rgba(201,64,64,.07); color:#c94040; font-size:9px; cursor:pointer; }
-
-/* MODAL OVERLAY */
-.modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.8); z-index:1000; display:flex; justify-content:center; align-items:center; }
-.modal { background:#1e1b18; border:1px solid #3a342e; border-radius:12px; width:92%; max-width:600px; max-height:88vh; overflow-y:auto; padding:24px; }
-.modal h2 { font-family:'EB Garamond',Georgia,serif; font-size:20px; color:#e8d5a0; font-weight:400; margin-bottom:16px; padding-bottom:10px; border-bottom:1px solid #3a342e; }
-.modal label { font-size:10px; color:#8a7e72; text-transform:uppercase; letter-spacing:1px; display:block; margin-bottom:3px; }
-.modal input, .modal textarea { width:100%; padding:7px 10px; border-radius:5px; border:1px solid #3a342e; background:#141210; color:#e8e0d6; font-size:13px; outline:none; }
-.modal textarea { resize:vertical; }
-.modal .field { margin-bottom:10px; }
-.mbtn { padding:7px 20px; border-radius:5px; font-size:12px; cursor:pointer; font-weight:600; }
-.mbtn.gold { border:none; background:#c49b2a; color:#1a1714; }
-.mbtn.ghost { border:1px solid #3a342e; background:none; color:#a09585; }
-.mbtn.red { border:1px solid rgba(201,64,64,.27); background:rgba(201,64,64,.07); color:#c94040; font-size:11px; }
-
-/* SETTINGS MODAL */
-.settings-wrap { display:flex; overflow:hidden; border-radius:12px; }
-.settings-nav { width:160px; border-right:1px solid #3a342e; padding:20px 0; background:#1a1714; overflow-y:auto; }
-.settings-nav .sn-title { padding:0 14px 14px; font-size:16px; color:#e8d5a0; font-family:'EB Garamond',Georgia,serif; }
-.settings-nav .sn-item { padding:7px 14px; font-size:12px; cursor:pointer; color:#8a7e72; border-left:3px solid transparent; transition:all .12s; }
-.settings-nav .sn-item.active { color:#e8d5a0; background:#2a2520; border-left-color:#c49b2a; }
-.settings-body { flex:1; padding:20px; overflow-y:auto; }
-
-/* COMPLEXITY BUTTONS */
-.cx-row { display:flex; gap:5px; }
-.cx-btn { width:48px; height:30px; border-radius:4px; font-size:10px; font-weight:600; cursor:pointer; }
-
-/* LEGEND */
-.legend { margin-top:14px; padding-top:10px; border-top:1px solid #2a2520; }
-.legend .lg-title { font-size:9px; color:#6a5e52; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }
-.legend .lg-item { display:flex; align-items:center; gap:5px; margin-bottom:2px; }
-.legend .lg-dot { width:8px; height:8px; border-radius:2px; }
-.legend .lg-label { font-size:9px; color:#8a7e72; }
-
-/* SYNC INDICATOR */
-.sync-bar { position:fixed; top:0; left:0; right:0; height:3px; z-index:2000; transition:opacity .3s; }
-.sync-bar.saving { background:linear-gradient(90deg,#c49b2a,#d4772a,#c49b2a); background-size:200% 100%; animation:shimmer 1.5s infinite; opacity:1; }
-.sync-bar.saved { background:#4a9e6e; opacity:1; }
-.sync-bar.error { background:#c94040; opacity:1; }
-.sync-bar.hidden { opacity:0; }
-@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-
-/* STATUS TOAST */
-.toast { position:fixed; bottom:20px; right:20px; padding:10px 16px; border-radius:6px; font-size:11px; z-index:2000; transition:all .3s; opacity:0; transform:translateY(10px); }
-.toast.show { opacity:1; transform:translateY(0); }
-.toast.ok { background:#4a9e6e; color:#fff; }
-.toast.err { background:#c94040; color:#fff; }
-.toast.info { background:#c49b2a; color:#1a1714; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans','Helvetica Neue',sans-serif;background:#141210;color:#e8e0d6;min-height:100vh}
+button,input,textarea,select{font-family:inherit}
+.header{background:#1a1714;border-bottom:1px solid #2a2520;padding:12px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.header h1{font-family:'EB Garamond',Georgia,serif;font-size:20px;font-weight:400;color:#e8d5a0}
+.header .sub{font-size:9px;color:#8a7e72;text-transform:uppercase;letter-spacing:2px}
+.hbtn{padding:6px 12px;border-radius:5px;font-size:11px;cursor:pointer;border:1px solid #3a342e;background:none;color:#a09585}
+.hbtn.gold{border-color:#c49b2a66;background:#c49b2a22;color:#e8d5a0;font-weight:600}
+.main{display:flex;height:calc(100vh - 56px)}
+.left{width:260px;min-width:260px;border-right:1px solid #2a2520;overflow-y:auto;padding:12px;background:#18150f}
+.left-title{font-size:10px;color:#8a7e72;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600}
+.chip{border-radius:5px;padding:5px 9px;margin-bottom:4px;cursor:grab;font-size:11px;color:#e8e0d6;transition:all .12s}
+.chip:hover{transform:scale(1.01)}
+.chip .name{font-weight:600;margin-bottom:1px}
+.chip .tags{font-size:9px;color:#a09585;display:flex;flex-wrap:wrap;gap:3px}
+.chip .tags span{background:rgba(255,255,255,.06);border-radius:2px;padding:0 3px}
+.chip .tags .tod{color:#7aaad4;font-style:italic;background:none}
+.cal-wrap{flex:1;overflow-y:auto;padding:14px}
+.cal-nav{display:flex;justify-content:center;align-items:center;gap:14px;margin-bottom:14px}
+.cal-nav button{background:none;border:1px solid #3a342e;color:#a09585;width:28px;height:28px;border-radius:5px;cursor:pointer;font-size:14px}
+.cal-nav h2{font-family:'EB Garamond',Georgia,serif;font-size:18px;font-weight:400;color:#e8d5a0;min-width:160px;text-align:center}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal-head{text-align:center;font-size:9px;color:#6a5e52;padding:5px 0;text-transform:uppercase;letter-spacing:1px}
+.cal-day{min-height:85px;border:1px solid rgba(42,37,32,.53);border-radius:5px;padding:4px;cursor:pointer;transition:all .12s;position:relative}
+.cal-day:hover{border-color:#3a342e}
+.cal-day.sel{border:1.5px solid #c49b2a;background:#2a2520}
+.cal-day.we{background:rgba(26,23,20,.53)}
+.cal-day .dnum{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px}
+.cal-day .dnum span{font-size:11px;font-weight:600;color:#a09585}
+.cal-day.sel .dnum span{color:#e8d5a0}
+.cal-day.we .dnum span{color:#6a5e52}
+.cal-day .badge{font-size:7px;padding:1px 4px;border-radius:8px;font-weight:600}
+.mini-chip{font-size:9px;padding:2px 4px;margin-bottom:1px;border-radius:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:grab;color:#e8e0d6}
+.stats{margin-top:14px;padding:12px;background:rgba(26,23,20,.53);border-radius:7px;border:1px solid #2a2520;display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+.stats .s{text-align:center}
+.stats .s .n{font-size:18px;font-weight:700}
+.stats .s .l{font-size:8px;color:#8a7e72;text-transform:uppercase}
+.daypanel{position:fixed;right:0;top:0;bottom:0;width:400px;background:#1e1b18;border-left:1px solid #3a342e;z-index:900;overflow-y:auto;box-shadow:-8px 0 32px rgba(0,0,0,.4);display:flex;flex-direction:column}
+.daypanel .dp-head{padding:16px 20px;border-bottom:1px solid #3a342e;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.daypanel .dp-head h2{font-family:'EB Garamond',Georgia,serif;font-size:18px;color:#e8d5a0;font-weight:400}
+.daypanel .dp-body{flex:1;overflow-y:auto;padding:16px}
+.dp-section{font-size:10px;color:#8a7e72;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;font-weight:600}
+.dp-callsheet{padding:8px;background:rgba(20,18,16,.53);border-radius:5px;border:1px solid #3a342e;font-size:10px;color:#a09585;line-height:1.6;margin-top:8px}
+.dp-callsheet strong{color:#c9b896}
+.res-box{padding:12px;background:#141210;border-radius:8px;border:1px solid #3a342e;margin-bottom:12px}
+.res-box .rb-title{font-size:11px;color:#e8d5a0;font-weight:600;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px}
+.res-box .rb-hint{font-size:10px;color:#8a7e72;margin-bottom:8px}
+.res-cat{margin-bottom:8px}
+.res-cat .rc-label{font-size:9px;color:#6a5e52;text-transform:uppercase;margin-bottom:3px}
+.tog-row{display:flex;flex-wrap:wrap;gap:4px}
+.tog{padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer;transition:all .12s;border:1px solid #3a342e;background:#1a1714;color:#8a7e72}
+.tog.on{border-color:var(--tc,#c49b2a);background:color-mix(in srgb,var(--tc,#c49b2a) 13%,transparent);color:#e8d5a0}
+.match-item{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.match-item .mi-info{flex:1;border-radius:5px;padding:5px 8px;cursor:pointer}
+.match-item .mi-info .mi-name{font-size:11px;color:#e8e0d6;font-weight:500}
+.match-item .mi-info .mi-meta{font-size:9px;color:#8a7e72;margin-top:2px}
+.match-item .mi-add{padding:4px 8px;border-radius:4px;border:1px solid rgba(74,158,110,.27);background:rgba(74,158,110,.07);color:#4a9e6e;font-size:10px;cursor:pointer;font-weight:600;white-space:nowrap}
+.asgn-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.asgn-row .ar-info{flex:1;border-radius:5px;padding:5px 8px;cursor:pointer;font-size:11px;color:#e8e0d6;font-weight:500}
+.asgn-row .ar-rem{padding:3px 7px;border-radius:3px;border:1px solid rgba(201,64,64,.27);background:rgba(201,64,64,.07);color:#c94040;font-size:9px;cursor:pointer}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:1000;display:flex;justify-content:center;align-items:center}
+.modal{background:#1e1b18;border:1px solid #3a342e;border-radius:12px;width:92%;max-width:600px;max-height:88vh;overflow-y:auto;padding:24px}
+.modal h2{font-family:'EB Garamond',Georgia,serif;font-size:20px;color:#e8d5a0;font-weight:400;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid #3a342e}
+.modal label{font-size:10px;color:#8a7e72;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:3px}
+.modal input,.modal textarea{width:100%;padding:7px 10px;border-radius:5px;border:1px solid #3a342e;background:#141210;color:#e8e0d6;font-size:13px;outline:none}
+.modal textarea{resize:vertical}
+.modal .field{margin-bottom:10px}
+.mbtn{padding:7px 20px;border-radius:5px;font-size:12px;cursor:pointer;font-weight:600}
+.mbtn.gold{border:none;background:#c49b2a;color:#1a1714}
+.mbtn.ghost{border:1px solid #3a342e;background:none;color:#a09585}
+.mbtn.red{border:1px solid rgba(201,64,64,.27);background:rgba(201,64,64,.07);color:#c94040;font-size:11px}
+.settings-wrap{display:flex;overflow:hidden;border-radius:12px}
+.settings-nav{width:160px;border-right:1px solid #3a342e;padding:20px 0;background:#1a1714;overflow-y:auto}
+.settings-nav .sn-title{padding:0 14px 14px;font-size:16px;color:#e8d5a0;font-family:'EB Garamond',Georgia,serif}
+.settings-nav .sn-item{padding:7px 14px;font-size:12px;cursor:pointer;color:#8a7e72;border-left:3px solid transparent;transition:all .12s}
+.settings-nav .sn-item.active{color:#e8d5a0;background:#2a2520;border-left-color:#c49b2a}
+.settings-body{flex:1;padding:20px;overflow-y:auto}
+.cx-row{display:flex;gap:5px}
+.cx-btn{width:48px;height:30px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer}
+.legend{margin-top:14px;padding-top:10px;border-top:1px solid #2a2520}
+.legend .lg-title{font-size:9px;color:#6a5e52;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+.legend .lg-item{display:flex;align-items:center;gap:5px;margin-bottom:2px}
+.legend .lg-dot{width:8px;height:8px;border-radius:2px}
+.legend .lg-label{font-size:9px;color:#8a7e72}
+.toast{position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:6px;font-size:11px;z-index:2000;transition:all .3s;opacity:0;transform:translateY(10px)}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.ok{background:#4a9e6e;color:#fff}
+.toast.err{background:#c94040;color:#fff}
+.toast.info{background:#c49b2a;color:#1a1714}
 </style>
 </head>
 <body>
-
-<div class="sync-bar hidden" id="syncBar"></div>
 <div class="toast" id="toast"></div>
-
 <div class="header">
   <div>
     <h1>PROJECT HAIRPIN</h1>
-    <div class="sub">Production Scheduler — Steel Draft</div>
+    <div class="sub">Production Scheduler</div>
   </div>
   <div style="display:flex;gap:6px">
     <button class="hbtn" onclick="openSettings()">⚙ Settings</button>
     <button class="hbtn gold" onclick="openEditor(null)">+ New Scene</button>
-    <button class="hbtn" onclick="saveAllToSheet()" id="saveBtn">💾 Save to Sheet</button>
   </div>
 </div>
-
 <div class="main">
   <div class="left" id="leftPanel"></div>
   <div class="cal-wrap" id="calWrap"></div>
   <div id="dayPanelMount"></div>
 </div>
-
 <div id="modalMount"></div>
 
 <script>
 // ═══════════════════════════════════════════════════════════════
-// *** PASTE YOUR APPS SCRIPT WEB APP URL HERE ***
-// ═══════════════════════════════════════════════════════════════
-const API_URL = "https://script.google.com/macros/s/AKfycbzNhOrqPKKbSt3NLpbv25w-KtZpA5DuUm6MEWpEc7gQeRMRmVL8Rq-tvQGBCMSUPs96/exec";
+// PASTE YOUR APPS SCRIPT URL HERE
+const API_URL = "https://script.google.com/macros/s/AKfycby9FrPqkOGFPcIOwHuDwk88ctBbe98Y6Wbw_MczLsuDQbY2SW5OlWJt8AtHvuDRon5b/exec";
 // ═══════════════════════════════════════════════════════════════
 
-// ─── DEFAULT DATA ────────────────────────────────────────────
+// ─── DEFAULT CATEGORIES (used if sheet is empty) ─────────────
 const DEFAULT_CATS = {
   cast:["Tom","Kim","Rhodes","Cobb/Drummond","Peter","Commissioner","Lawyer/Hadley","Forensics Officer"],
   locations:["Reese Air Force Base","Cook's Garage","Winery","Landfill","Police Station","McDougal Building","Kim's Apartment","Tom's Apartment","Donut Shop","Police Cruiser/Rural Road","Whataburger","Wind Farm/Dirt Field","Country Roads","The Void"],
@@ -181,438 +133,383 @@ const DEFAULT_CATS = {
   extras:["Winery Guards (3-5)","Cook's Bar Patrons (12)","Storage Bay Goons (3)","Burly Guard (1)","Landfill Mercs (3-4)","Reese Mercs (7)","Uniformed Police (4-6)","Ambulance Crew (2)","Night Receptionist (1)"]
 };
 
-const DEFAULT_SCENES = [
-  {id:"s1",name:"Opening — Kim's Apartment",cast:["Tom","Kim"],locations:["Kim's Apartment"],timeOfDay:["Morning"],lighting:["Controlled Interior"],weather:["Any Weather"],props:[],extras:[],complexity:2,notes:"Band of sunlight, morning routine, pill, stairway"},
-  {id:"s2",name:"Driving Montage — 34th St",cast:["Tom"],locations:["Country Roads"],timeOfDay:["Day"],lighting:["Harsh Sun"],weather:["Clear Required"],props:["Tommy's Red Civic"],extras:[],complexity:1,notes:"Gear stick CUs, Cook's Garage pass"},
-  {id:"s3",name:"Winery Tasting & Barrel Room",cast:["Tom","Kim","Cobb/Drummond","Peter"],locations:["Winery"],timeOfDay:["Day"],lighting:["Controlled Interior"],weather:["Any Weather"],props:[],extras:["Winery Guards (3-5)"],complexity:4,notes:"Cobb intro, gold tooth, barrel room, TITLE CARD"},
-  {id:"s4",name:"Donut Shop — Rhodes Banter",cast:["Tom","Rhodes"],locations:["Donut Shop"],timeOfDay:["Sunset/Dusk"],lighting:["Golden Hour"],weather:["Clear Required"],props:["White Van"],extras:[],complexity:2,notes:"Copper wire monologue, van screams past"},
-  {id:"s5",name:"Police Cruiser — Rural Drive",cast:["Tom","Rhodes"],locations:["Police Cruiser/Rural Road"],timeOfDay:["Sunset/Dusk","Night"],lighting:["Golden Hour","Moonlight/Night Ext"],weather:["Any Weather"],props:["Police Cruiser","White Van"],extras:[],complexity:2,notes:"Friday banter, van passes again"},
-  {id:"s6",name:"Winery Crime Scene",cast:["Tom","Rhodes","Forensics Officer"],locations:["Winery"],timeOfDay:["Night"],lighting:["Practical Lights Only"],weather:["Any Weather"],props:["Ambulances","Police Cruiser"],extras:["Uniformed Police (4-6)","Ambulance Crew (2)"],complexity:5,notes:"LONG TRACKING SHOT, body reveal"},
-  {id:"s7",name:"Police Station — All Scenes",cast:["Tom","Rhodes","Commissioner"],locations:["Police Station"],timeOfDay:["Night"],lighting:["Controlled Interior"],weather:["Any Weather"],props:[],extras:[],complexity:3,notes:"Holding area, commissioner, eavesdrop"},
-  {id:"s8",name:"McDougal — Tommy Solo",cast:["Tom","Lawyer/Hadley"],locations:["McDougal Building"],timeOfDay:["Night"],lighting:["Practical Lights Only"],weather:["Any Weather"],props:["Tommy's Red Civic"],extras:["Night Receptionist (1)"],complexity:3,notes:"Noir investigation, barrel shipments call"},
-  {id:"s9",name:"Tom's Apt — Both Timelines",cast:["Tom"],locations:["Tom's Apartment"],timeOfDay:["Night"],lighting:["Practical Lights Only"],weather:["Any Weather"],props:["Kevlar Vest","Shotgun"],extras:[],complexity:3,notes:"Window silhouette, blood vomit, gear-up"},
-  {id:"s10",name:"Landfill — ACT I Tommy POV",cast:["Tom","Kim","Rhodes"],locations:["Landfill"],timeOfDay:["Night"],lighting:["Moonlight/Night Ext"],weather:["Clear Required"],props:["Tommy's Red Civic","Kim's Red Car"],extras:["Landfill Mercs (3-4)"],complexity:5,notes:"Duplicate visible, gunfight, body fall"},
-  {id:"s11",name:"Country Roads — Tom & Rhodes",cast:["Tom","Rhodes"],locations:["Country Roads"],timeOfDay:["Night"],lighting:["Controlled Interior"],weather:["Any Weather"],props:["Tommy's Red Civic","Peter's Truck"],extras:[],complexity:1,notes:"Schizophrenia reveal, spare gun handoff"},
-  {id:"s12",name:"Cook's — ACT I Bar",cast:["Tom","Rhodes","Peter"],locations:["Cook's Garage"],timeOfDay:["Night"],lighting:["Practical Lights Only"],weather:["Any Weather"],props:["Neon Signs"],extras:["Cook's Bar Patrons (12)"],complexity:5,notes:"Estacado Sunrise code, skybridge from below, Peter leg shot"},
-  {id:"s13",name:"Reese — ACT I Discovery",cast:["Tom","Rhodes"],locations:["Reese Air Force Base"],timeOfDay:["Night"],lighting:["Practical Lights Only"],weather:["Any Weather"],props:["Peter's Truck","The Machine"],extras:["Reese Mercs (7)"],complexity:5,notes:"Machine reveal, duplicate closet, Tommy steps through"},
-  {id:"s14",name:"The Void — Machine Passage",cast:["Tom"],locations:["The Void"],timeOfDay:["Night"],lighting:["Controlled Interior"],weather:["Any Weather"],props:[],extras:[],complexity:2,notes:"VFX environment, burning doorway"},
-  {id:"s15",name:"Reese — ACT II Tom Emerges",cast:["Tom"],locations:["Reese Air Force Base"],timeOfDay:["Sunset/Dusk"],lighting:["Golden Hour"],weather:["Clear Required"],props:["White Van"],extras:[],complexity:3,notes:"CAMERA SHIFT handheld, grackles, 911 call"},
-  {id:"s16",name:"Winery — ACT II Murder",cast:["Tom","Kim","Cobb/Drummond","Peter"],locations:["Winery"],timeOfDay:["Sunset/Dusk","Night"],lighting:["Practical Lights Only"],weather:["Any Weather"],props:["Snub Revolver"],extras:["Winery Guards (3-5)"],complexity:5,notes:"Cobb shoots Kim, Tom on catwalk, valve"},
-  {id:"s17",name:"Winery — Midpoint & Slip Out",cast:["Tom","Forensics Officer"],locations:["Winery"],timeOfDay:["Night"],lighting:["Practical Lights Only"],weather:["Any Weather"],props:["White Van"],extras:["Uniformed Police (4-6)"],complexity:2,notes:"Midpoint grief, Tom blends with officers"},
-  {id:"s18",name:"Landfill — ACT II Tom POV",cast:["Tom","Kim"],locations:["Landfill"],timeOfDay:["Night"],lighting:["Moonlight/Night Ext"],weather:["Clear Required"],props:["White Van","Kim's Red Car"],extras:["Landfill Mercs (3-4)"],complexity:5,notes:"Knife kill, sniper headshot, grab Kim"},
-  {id:"s19",name:"Wind Farm — Strategy Talk",cast:["Tom","Kim"],locations:["Wind Farm/Dirt Field"],timeOfDay:["Night"],lighting:["Moonlight/Night Ext"],weather:["Clear Required"],props:["Kim's Red Car"],extras:[],complexity:2,notes:"Machine rules, aviation lights"},
-  {id:"s20",name:"Whataburger — Bathroom Floor",cast:["Tom","Kim"],locations:["Whataburger"],timeOfDay:["Night"],lighting:["Controlled Interior"],weather:["Any Weather"],props:[],extras:[],complexity:3,notes:"EMOTIONAL CORE, blood vomit, dark veins"},
-  {id:"s21",name:"McDougal — ACT II Corridor",cast:["Tom","Kim","Lawyer/Hadley"],locations:["McDougal Building"],timeOfDay:["Night"],lighting:["Controlled Interior"],weather:["Any Weather"],props:[],extras:[],complexity:3,notes:"Lawyer confession, lockbox at Cook's"},
-  {id:"s22",name:"Cook's — ACT II Infiltration",cast:["Tom","Kim","Peter"],locations:["Cook's Garage"],timeOfDay:["Night"],lighting:["Practical Lights Only"],weather:["Any Weather"],props:["Tommy's Red Civic","Neon Signs"],extras:["Cook's Bar Patrons (12)","Storage Bay Goons (3)","Burly Guard (1)"],complexity:5,notes:"POV shot, undercover, safe crack, skybridge escape"},
-  {id:"s23",name:"Reese — ACT II Dawn Assault",cast:["Tom","Kim"],locations:["Reese Air Force Base"],timeOfDay:["Dawn/Sunrise"],lighting:["Golden Hour","Blue Hour"],weather:["Clear Required"],props:["Kevlar Vest","Rifles","The Machine"],extras:["Reese Mercs (7)"],complexity:5,notes:"7 stunt kills, Kim betrayal, closet"},
-  {id:"s24",name:"Reese — ACT III Search",cast:["Tom","Rhodes"],locations:["Reese Air Force Base"],timeOfDay:["Dawn/Sunrise"],lighting:["Blue Hour"],weather:["Clear Required"],props:[],extras:[],complexity:3,notes:"Building search, Cobb PA monologue, murmuration"},
-  {id:"s25",name:"Reese — ACT III Confrontation",cast:["Tom","Rhodes","Cobb/Drummond","Peter"],locations:["Reese Air Force Base"],timeOfDay:["Dawn/Sunrise"],lighting:["Golden Hour"],weather:["Clear Required"],props:["Snub Revolver","Kevlar Vest","Rifles"],extras:[],complexity:5,notes:"Triangle standoff, Rhodes killed, machine fire, grackles"},
-  {id:"s26",name:"Van Driving — Tom & Kim",cast:["Tom","Kim"],locations:["Country Roads"],timeOfDay:["Night"],lighting:["Controlled Interior"],weather:["Any Weather"],props:["White Van"],extras:[],complexity:1,notes:"Drifting, phone thrown, Whataburger visible"},
-  {id:"s27",name:"Kim's Apt — Stairway & Car",cast:["Tom","Kim"],locations:["Kim's Apartment"],timeOfDay:["Morning"],lighting:["Harsh Sun"],weather:["Clear Required"],props:["Tommy's Red Civic"],extras:[],complexity:1,notes:"Lock rattle, key jingle, 'I'm driving'"}
-];
-
-// ─── STATE ───────────────────────────────────────────────────
+// ─── STATE (starts empty — loads from sheet) ─────────────────
 let cats = JSON.parse(JSON.stringify(DEFAULT_CATS));
-let scenes = JSON.parse(JSON.stringify(DEFAULT_SCENES));
+let scenes = [];
 let sched = {};
-let yr = 2026, mo = 4; // May
+let yr = 2026, mo = 4;
 let selDay = null;
 let dragId = null, dragFromKey = null;
 
-const CC = {1:"#4a9e6e",2:"#6b9e4a",3:"#c49b2a",4:"#d4772a",5:"#c94040"};
-const CL = {1:"Simple",2:"Easy",3:"Medium",4:"Hard",5:"Major"};
-const MO = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-const DN = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-
-function daysIn(y,m){return new Date(y,m+1,0).getDate();}
-function firstDow(y,m){return new Date(y,m,1).getDay();}
-function dk(y,m,d){return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;}
-function dkey(d){return dk(yr,mo,d);}
-function getScene(id){return scenes.find(s=>s.id===id);}
-function scheduled(){return new Set(Object.values(sched).flat());}
+const CC={1:"#4a9e6e",2:"#6b9e4a",3:"#c49b2a",4:"#d4772a",5:"#c94040"};
+const CL={1:"Simple",2:"Easy",3:"Medium",4:"Hard",5:"Major"};
+const MO=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const DN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+function daysIn(y,m){return new Date(y,m+1,0).getDate()}
+function firstDow(y,m){return new Date(y,m,1).getDay()}
+function dk(y,m,d){return y+"-"+String(m+1).padStart(2,"0")+"-"+String(d).padStart(2,"0")}
+function dkey(d){return dk(yr,mo,d)}
+function getScene(id){return scenes.find(function(s){return s.id===id})}
+function scheduledSet(){return new Set(Object.values(sched).flat())}
 
 // ─── JSONP ───────────────────────────────────────────────────
-function apiCall(params) {
-  return new Promise((resolve) => {
-    const cbName = "jcb_" + Date.now() + "_" + Math.floor(Math.random()*10000);
-    const timeout = setTimeout(() => {
-      delete window[cbName]; if(script.parentNode) script.parentNode.removeChild(script);
-      resolve({error:"Request timed out"});
-    }, 20000);
-    window[cbName] = function(data) {
-      clearTimeout(timeout); delete window[cbName]; if(script.parentNode) script.parentNode.removeChild(script);
-      resolve(data);
-    };
-    const script = document.createElement("script");
-    script.src = API_URL + "?" + params + "&callback=" + cbName;
-    script.onerror = function() { clearTimeout(timeout); delete window[cbName]; if(script.parentNode) script.parentNode.removeChild(script); resolve({error:"Network error"}); };
-    document.body.appendChild(script);
+function api(params){
+  return new Promise(function(resolve){
+    var cb="jcb_"+Date.now()+"_"+Math.floor(Math.random()*10000);
+    var t=setTimeout(function(){delete window[cb];if(sc.parentNode)sc.parentNode.removeChild(sc);resolve({error:"Request timed out"})},20000);
+    window[cb]=function(data){clearTimeout(t);delete window[cb];if(sc.parentNode)sc.parentNode.removeChild(sc);resolve(data)};
+    var sc=document.createElement("script");
+    sc.src=API_URL+"?"+params+"&callback="+cb;
+    sc.onerror=function(){clearTimeout(t);delete window[cb];if(sc.parentNode)sc.parentNode.removeChild(sc);resolve({error:"Network error"})};
+    document.body.appendChild(sc);
   });
 }
 
-// ─── SYNC ────────────────────────────────────────────────────
-function showSync(state) {
-  const bar = document.getElementById("syncBar");
-  bar.className = "sync-bar " + state;
-  if (state === "saved") setTimeout(()=>bar.className="sync-bar hidden", 2000);
-  if (state === "error") setTimeout(()=>bar.className="sync-bar hidden", 4000);
+// Small helper — send a write payload
+function apiWrite(payload){
+  return api("payload="+encodeURIComponent(JSON.stringify(payload)));
 }
 
-function showToast(msg, type) {
-  const t = document.getElementById("toast");
-  t.textContent = msg; t.className = "toast " + type + " show";
-  setTimeout(()=>t.className="toast",3000);
+// ─── TOAST ───────────────────────────────────────────────────
+function toast(msg,type){
+  var t=document.getElementById("toast");
+  t.textContent=msg;t.className="toast "+type+" show";
+  setTimeout(function(){t.className="toast"},3000);
 }
 
-async function loadFromSheet() {
-  if (!API_URL || API_URL === "PASTE_YOUR_APPS_SCRIPT_URL_HERE") {
-    showToast("Using local defaults — set API_URL to connect to Google Sheets", "info");
-    render();
-    return;
+// ─── LOAD FROM SHEET ─────────────────────────────────────────
+async function loadFromSheet(){
+  var data = await api("action=getAll");
+  if(data.error){toast("Load failed: "+data.error,"err");render();return}
+  if(data.scenes && data.scenes.length>0) scenes=data.scenes;
+  if(data.schedule) sched=data.schedule;
+  if(data.cats){
+    Object.keys(data.cats).forEach(function(k){if(data.cats[k].length>0)cats[k]=data.cats[k]});
   }
-  showSync("saving");
-  const data = await apiCall("action=getAll");
-  if (data.error) {
-    showSync("error");
-    showToast("Load failed: " + data.error, "err");
-    render();
-    return;
-  }
-  if (data.scenes && data.scenes.length > 0) scenes = data.scenes;
-  if (data.schedule) sched = data.schedule;
-  if (data.cats) {
-    Object.keys(data.cats).forEach(k => { if(data.cats[k].length > 0) cats[k] = data.cats[k]; });
-  }
-  showSync("saved");
-  showToast("Loaded from Google Sheets", "ok");
+  toast("Loaded from Google Sheets","ok");
   render();
 }
 
-async function saveAllToSheet() {
-  if (!API_URL || API_URL === "PASTE_YOUR_APPS_SCRIPT_URL_HERE") {
-    showToast("Set API_URL first to enable saving", "err");
-    return;
-  }
-  showSync("saving");
-  const payload = JSON.stringify({action:"saveAll", scenes:scenes, schedule:sched, cats:cats});
-  const data = await apiCall("payload=" + encodeURIComponent(payload));
-  if (data.error) {
-    showSync("error");
-    showToast("Save failed: " + data.error, "err");
-  } else {
-    showSync("saved");
-    showToast("Saved to Google Sheets!", "ok");
-  }
+// ─── INDIVIDUAL SAVES (no bulk) ──────────────────────────────
+async function saveSceneToSheet(scene){
+  var r=await apiWrite({action:"saveScene",scene:scene});
+  if(r.error) toast("Save failed: "+r.error,"err");
+}
+
+async function deleteSceneFromSheet(id){
+  var r=await apiWrite({action:"deleteScene",id:id});
+  if(r.error) toast("Delete failed: "+r.error,"err");
+}
+
+async function assignOnSheet(dateKey,sceneId){
+  var r=await apiWrite({action:"assignScene",dateKey:dateKey,sceneId:sceneId});
+  if(r.error) toast("Assign failed: "+r.error,"err");
+}
+
+async function unassignOnSheet(dateKey,sceneId){
+  var r=await apiWrite({action:"unassignScene",dateKey:dateKey,sceneId:sceneId});
+  if(r.error) toast("Unassign failed: "+r.error,"err");
+}
+
+async function moveOnSheet(fromKey,toKey,sceneId){
+  var r=await apiWrite({action:"moveScene",fromKey:fromKey,toKey:toKey,sceneId:sceneId});
+  if(r.error) toast("Move failed: "+r.error,"err");
+}
+
+async function saveCatsToSheet(){
+  var r=await apiWrite({action:"saveCategories",cats:cats});
+  if(r.error) toast("Settings save failed: "+r.error,"err");
+  else toast("Settings saved","ok");
 }
 
 // ─── RENDER ──────────────────────────────────────────────────
-function render() {
-  renderLeft();
-  renderCal();
-  if (selDay) renderDayPanel(selDay);
-}
+function render(){renderLeft();renderCal();if(selDay)renderDayPanel(selDay)}
 
-function renderLeft() {
-  const el = document.getElementById("leftPanel");
-  const sset = scheduled();
-  const unsched = scenes.filter(s=>!sset.has(s.id)).sort((a,b)=>b.complexity-a.complexity||b.cast.length-a.cast.length);
-
-  let h = `<div class="left-title">Unscheduled (${unsched.length})</div>`;
-  unsched.forEach(s => {
-    h += `<div class="chip" draggable="true" ondragstart="startDrag('${s.id}',null)" onclick="openEditor('${s.id}')" style="background:linear-gradient(135deg,${CC[s.complexity]}22,${CC[s.complexity]}11);border:1.5px solid ${CC[s.complexity]}55;border-left:4px solid ${CC[s.complexity]}">`;
-    h += `<div class="name">${esc(s.name)}</div>`;
-    h += `<div class="tags">`;
-    s.cast.forEach(c => h += `<span>${esc(c)}</span>`);
-    s.timeOfDay.forEach(t => h += `<span class="tod">${esc(t)}</span>`);
-    h += `</div></div>`;
+function renderLeft(){
+  var el=document.getElementById("leftPanel");
+  var sset=scheduledSet();
+  var unsched=scenes.filter(function(s){return !sset.has(s.id)}).sort(function(a,b){return b.complexity-a.complexity||b.cast.length-a.cast.length});
+  var h='<div class="left-title">Unscheduled ('+unsched.length+')</div>';
+  unsched.forEach(function(s){
+    h+='<div class="chip" draggable="true" ondragstart="startDrag(\''+s.id+'\',null)" onclick="openEditor(\''+s.id+'\')" style="background:linear-gradient(135deg,'+CC[s.complexity]+'22,'+CC[s.complexity]+'11);border:1.5px solid '+CC[s.complexity]+'55;border-left:4px solid '+CC[s.complexity]+'">';
+    h+='<div class="name">'+esc(s.name)+'</div><div class="tags">';
+    s.cast.forEach(function(c){h+='<span>'+esc(c)+'</span>'});
+    s.timeOfDay.forEach(function(t){h+='<span class="tod">'+esc(t)+'</span>'});
+    h+='</div></div>';
   });
-  if (!unsched.length) h += `<div style="font-size:11px;color:#5a5248;text-align:center;padding:16px">All scenes scheduled!</div>`;
-
-  h += `<div class="legend"><div class="lg-title">Complexity</div>`;
-  [1,2,3,4,5].forEach(n => h += `<div class="lg-item"><div class="lg-dot" style="background:${CC[n]}"></div><div class="lg-label">${CL[n]}</div></div>`);
-  h += `</div>`;
-
-  el.innerHTML = h;
+  if(!unsched.length) h+='<div style="font-size:11px;color:#5a5248;text-align:center;padding:16px">No scenes yet — click + New Scene</div>';
+  h+='<div class="legend"><div class="lg-title">Complexity</div>';
+  [1,2,3,4,5].forEach(function(n){h+='<div class="lg-item"><div class="lg-dot" style="background:'+CC[n]+'"></div><div class="lg-label">'+CL[n]+'</div></div>'});
+  h+='</div>';
+  el.innerHTML=h;
 }
 
-function renderCal() {
-  const el = document.getElementById("calWrap");
-  const dim = daysIn(yr,mo), fd = firstDow(yr,mo);
-  const sset = scheduled();
-  const unsched = scenes.filter(s=>!sset.has(s.id));
-
-  let h = `<div class="cal-nav"><button onclick="prevMo()">‹</button><h2>${MO[mo]} ${yr}</h2><button onclick="nextMo()">›</button></div>`;
-  h += `<div class="cal-grid">`;
-  DN.forEach(d => h += `<div class="cal-head">${d}</div>`);
-  for (let i=0;i<fd;i++) h += `<div></div>`;
-  for (let i=1;i<=dim;i++) {
-    const k = dkey(i);
-    const ds = (sched[k]||[]).map(getScene).filter(Boolean);
-    const sel = selDay===i;
-    const we = (fd+i-1)%7===0||(fd+i-1)%7===6;
-    const tc = ds.reduce((a,s)=>a+s.complexity,0);
-    h += `<div class="cal-day${sel?" sel":""}${we?" we":""}" onclick="selectDay(${i})" ondragover="event.preventDefault()" ondrop="dropOnDay(event,${i})">`;
-    h += `<div class="dnum"><span>${i}</span>`;
-    if(ds.length) h += `<span class="badge" style="background:${tc>8?"#c9404033":"#c49b2a22"};color:${tc>8?"#e8a0a0":"#c49b2a"}">${ds.length}s</span>`;
-    h += `</div>`;
-    ds.slice(0,3).forEach(s => {
-      h += `<div class="mini-chip" draggable="true" ondragstart="event.stopPropagation();startDrag('${s.id}','${k}')" style="background:${CC[s.complexity]}22;border-left:2px solid ${CC[s.complexity]}">${esc(s.name)}</div>`;
+function renderCal(){
+  var el=document.getElementById("calWrap");
+  var dim=daysIn(yr,mo),fd=firstDow(yr,mo);
+  var sset=scheduledSet();
+  var unsched=scenes.filter(function(s){return !sset.has(s.id)});
+  var h='<div class="cal-nav"><button onclick="prevMo()">&#8249;</button><h2>'+MO[mo]+' '+yr+'</h2><button onclick="nextMo()">&#8250;</button></div>';
+  h+='<div class="cal-grid">';
+  DN.forEach(function(d){h+='<div class="cal-head">'+d+'</div>'});
+  for(var i=0;i<fd;i++) h+='<div></div>';
+  for(var i=1;i<=dim;i++){
+    var k=dkey(i);
+    var ds=(sched[k]||[]).map(getScene).filter(Boolean);
+    var sel=selDay===i;
+    var we=(fd+i-1)%7===0||(fd+i-1)%7===6;
+    var tc=ds.reduce(function(a,s){return a+s.complexity},0);
+    h+='<div class="cal-day'+(sel?' sel':'')+(we?' we':'')+'" onclick="selectDay('+i+')" ondragover="event.preventDefault()" ondrop="dropOnDay(event,'+i+')">';
+    h+='<div class="dnum"><span>'+i+'</span>';
+    if(ds.length) h+='<span class="badge" style="background:'+(tc>8?'#c9404033':'#c49b2a22')+';color:'+(tc>8?'#e8a0a0':'#c49b2a')+'">'+ds.length+'s</span>';
+    h+='</div>';
+    ds.slice(0,3).forEach(function(s){
+      h+='<div class="mini-chip" draggable="true" ondragstart="event.stopPropagation();startDrag(\''+s.id+'\',\''+k+'\')" style="background:'+CC[s.complexity]+'22;border-left:2px solid '+CC[s.complexity]+'">'+esc(s.name)+'</div>';
     });
-    if(ds.length>3) h += `<div style="font-size:8px;color:#6a5e52;text-align:center">+${ds.length-3}</div>`;
-    h += `</div>`;
+    if(ds.length>3) h+='<div style="font-size:8px;color:#6a5e52;text-align:center">+'+(ds.length-3)+'</div>';
+    h+='</div>';
   }
-  h += `</div>`;
-
-  h += `<div class="stats">`;
-  const shootDays = Object.values(sched).filter(v=>v.length>0).length;
-  [{v:shootDays,l:"Shoot Days",c:"#e8d5a0"},{v:sset.size,l:"Scheduled",c:"#e8d5a0"},{v:unsched.length,l:"Remaining",c:unsched.length?"#c49b2a":"#4a9e6e"},{v:scenes.length,l:"Total",c:"#e8d5a0"}].forEach(({v,l,c})=>{
-    h += `<div class="s"><div class="n" style="color:${c}">${v}</div><div class="l">${l}</div></div>`;
+  h+='</div>';
+  h+='<div class="stats">';
+  var shootDays=Object.values(sched).filter(function(v){return v.length>0}).length;
+  [{v:shootDays,l:"Shoot Days",c:"#e8d5a0"},{v:sset.size,l:"Scheduled",c:"#e8d5a0"},{v:unsched.length,l:"Remaining",c:unsched.length?"#c49b2a":"#4a9e6e"},{v:scenes.length,l:"Total",c:"#e8d5a0"}].forEach(function(o){
+    h+='<div class="s"><div class="n" style="color:'+o.c+'">'+o.v+'</div><div class="l">'+o.l+'</div></div>';
   });
-  h += `</div>`;
-
-  el.innerHTML = h;
+  h+='</div>';
+  el.innerHTML=h;
 }
 
-// ─── DAY PANEL (resource-based matching) ─────────────────────
-let dpAvail = {cast:[],locations:[],timeOfDay:[],props:[],weather:[]};
+// ─── DAY PANEL ───────────────────────────────────────────────
+var dpAvail={cast:[],locations:[],timeOfDay:[],props:[],weather:[]};
 
-function renderDayPanel(day) {
-  const k = dkey(day);
-  const assigned = (sched[k]||[]).map(getScene).filter(Boolean);
-  const sset = scheduled();
-  const unsched = scenes.filter(s=>!sset.has(s.id));
-  const tc = assigned.reduce((a,s)=>a+s.complexity,0);
-
-  // Match logic
-  const hasFilters = dpAvail.cast.length||dpAvail.locations.length||dpAvail.timeOfDay.length||dpAvail.props.length||dpAvail.weather.length;
-  const matches = !hasFilters ? [] : unsched.filter(s => {
-    if(dpAvail.cast.length && !s.cast.every(c=>dpAvail.cast.includes(c))) return false;
-    if(dpAvail.locations.length && !s.locations.some(l=>dpAvail.locations.includes(l))) return false;
-    if(dpAvail.timeOfDay.length && !s.timeOfDay.some(t=>dpAvail.timeOfDay.includes(t))) return false;
-    if(dpAvail.props.length && !s.props.every(p=>dpAvail.props.includes(p))) return false;
-    if(dpAvail.weather.length && !s.weather.some(w=>dpAvail.weather.includes(w)||w==="Any Weather")) return false;
+function renderDayPanel(day){
+  var k=dkey(day);
+  var assigned=(sched[k]||[]).map(getScene).filter(Boolean);
+  var sset=scheduledSet();
+  var unsched=scenes.filter(function(s){return !sset.has(s.id)});
+  var tc=assigned.reduce(function(a,s){return a+s.complexity},0);
+  var hasF=dpAvail.cast.length||dpAvail.locations.length||dpAvail.timeOfDay.length||dpAvail.props.length||dpAvail.weather.length;
+  var matches=!hasF?[]:unsched.filter(function(s){
+    if(dpAvail.cast.length&&!s.cast.every(function(c){return dpAvail.cast.indexOf(c)>=0}))return false;
+    if(dpAvail.locations.length&&!s.locations.some(function(l){return dpAvail.locations.indexOf(l)>=0}))return false;
+    if(dpAvail.timeOfDay.length&&!s.timeOfDay.some(function(t){return dpAvail.timeOfDay.indexOf(t)>=0}))return false;
+    if(dpAvail.props.length&&!s.props.every(function(p){return dpAvail.props.indexOf(p)>=0}))return false;
+    if(dpAvail.weather.length&&!s.weather.some(function(w){return dpAvail.weather.indexOf(w)>=0||w==="Any Weather"}))return false;
     return true;
-  }).sort((a,b)=>b.complexity-a.complexity);
+  }).sort(function(a,b){return b.complexity-a.complexity});
 
-  let h = `<div class="daypanel"><div class="dp-head"><h2>${MO[mo]} ${day}, ${yr}</h2><button class="hbtn" onclick="closeDay()">✕</button></div><div class="dp-body">`;
-
-  // Assigned
-  if (assigned.length) {
-    h += `<div class="dp-section">Shooting This Day (${assigned.length} · complexity ${tc})</div>`;
-    assigned.forEach(s => {
-      h += `<div class="asgn-row"><div class="ar-info" onclick="openEditor('${s.id}')" style="background:${CC[s.complexity]}15;border:1px solid ${CC[s.complexity]}44;border-left:3px solid ${CC[s.complexity]}">${esc(s.name)}</div><button class="ar-rem" onclick="remFromDay('${s.id}','${k}')">Remove</button></div>`;
+  var h='<div class="daypanel"><div class="dp-head"><h2>'+MO[mo]+' '+day+', '+yr+'</h2><button class="hbtn" onclick="closeDay()">&#10005;</button></div><div class="dp-body">';
+  if(assigned.length){
+    h+='<div class="dp-section">Shooting This Day ('+assigned.length+' &middot; complexity '+tc+')</div>';
+    assigned.forEach(function(s){
+      h+='<div class="asgn-row"><div class="ar-info" onclick="openEditor(\''+s.id+'\')" style="background:'+CC[s.complexity]+'15;border:1px solid '+CC[s.complexity]+'44;border-left:3px solid '+CC[s.complexity]+'">'+esc(s.name)+'</div><button class="ar-rem" onclick="remFromDay(\''+s.id+'\',\''+k+'\')">Remove</button></div>';
     });
-    const allC=[...new Set(assigned.flatMap(s=>s.cast))], allL=[...new Set(assigned.flatMap(s=>s.locations))], allP=[...new Set(assigned.flatMap(s=>s.props))], allE=[...new Set(assigned.flatMap(s=>s.extras))];
-    h += `<div class="dp-callsheet"><strong>Cast:</strong> ${allC.join(", ")}<br><strong>Locations:</strong> ${allL.join(", ")}<br><strong>Props:</strong> ${allP.join(", ")||"—"}<br><strong>Extras:</strong> ${allE.join(", ")||"—"}</div>`;
-    h += `<div style="height:16px"></div>`;
+    var allC=[],allL=[],allP=[],allE=[];
+    assigned.forEach(function(s){s.cast.forEach(function(c){if(allC.indexOf(c)<0)allC.push(c)});s.locations.forEach(function(l){if(allL.indexOf(l)<0)allL.push(l)});s.props.forEach(function(p){if(allP.indexOf(p)<0)allP.push(p)});s.extras.forEach(function(e){if(allE.indexOf(e)<0)allE.push(e)})});
+    h+='<div class="dp-callsheet"><strong>Cast:</strong> '+allC.join(", ")+'<br><strong>Locations:</strong> '+allL.join(", ")+'<br><strong>Props:</strong> '+(allP.join(", ")||"—")+'<br><strong>Extras:</strong> '+(allE.join(", ")||"—")+'</div><div style="height:16px"></div>';
   }
-
-  // Resource selector
-  h += `<div class="res-box"><div class="rb-title">What do you have this day?</div><div class="rb-hint">Toggle available resources — matching scenes appear below</div>`;
-  h += renderTogCat("cast","Cast Available",dpAvail.cast,"#c49b2a");
-  h += renderTogCat("locations","Locations Accessible",dpAvail.locations,"#5ab87a");
-  h += renderTogCat("timeOfDay","Time of Day",dpAvail.timeOfDay,"#7aaad4");
-  h += renderTogCat("props","Props Available",dpAvail.props,"#d4772a");
-  h += renderTogCat("weather","Weather Forecast",dpAvail.weather,"#8b7bc4");
-  h += `</div>`;
-
-  // Matches
-  if (hasFilters) {
-    h += `<div class="dp-section">Scenes That Fit (${matches.length})</div>`;
-    if (!matches.length) h += `<div style="font-size:11px;color:#5a5248;text-align:center;padding:12px">No unscheduled scenes match</div>`;
-    matches.forEach(s => {
-      h += `<div class="match-item"><div class="mi-info" onclick="openEditor('${s.id}')" style="background:${CC[s.complexity]}15;border:1px solid ${CC[s.complexity]}44;border-left:3px solid ${CC[s.complexity]}"><div class="mi-name">${esc(s.name)}</div><div class="mi-meta">${s.cast.join(", ")} · ${s.locations.join(", ")}</div></div><button class="mi-add" onclick="addToDay('${s.id}',${day})">+ Add</button></div>`;
+  h+='<div class="res-box"><div class="rb-title">What do you have this day?</div><div class="rb-hint">Toggle available resources — matching scenes appear below</div>';
+  h+=togCat("cast","Cast Available",dpAvail.cast,"#c49b2a");
+  h+=togCat("locations","Locations Accessible",dpAvail.locations,"#5ab87a");
+  h+=togCat("timeOfDay","Time of Day",dpAvail.timeOfDay,"#7aaad4");
+  h+=togCat("props","Props Available",dpAvail.props,"#d4772a");
+  h+=togCat("weather","Weather Forecast",dpAvail.weather,"#8b7bc4");
+  h+='</div>';
+  if(hasF){
+    h+='<div class="dp-section">Scenes That Fit ('+matches.length+')</div>';
+    if(!matches.length) h+='<div style="font-size:11px;color:#5a5248;text-align:center;padding:12px">No unscheduled scenes match</div>';
+    matches.forEach(function(s){
+      h+='<div class="match-item"><div class="mi-info" onclick="openEditor(\''+s.id+'\')" style="background:'+CC[s.complexity]+'15;border:1px solid '+CC[s.complexity]+'44;border-left:3px solid '+CC[s.complexity]+'"><div class="mi-name">'+esc(s.name)+'</div><div class="mi-meta">'+s.cast.join(", ")+' &middot; '+s.locations.join(", ")+'</div></div><button class="mi-add" onclick="addToDay(\''+s.id+'\','+day+')">+ Add</button></div>';
     });
   } else {
-    h += `<div style="font-size:11px;color:#5a5248;text-align:center;padding:16px">Select resources above to find matching scenes</div>`;
+    h+='<div style="font-size:11px;color:#5a5248;text-align:center;padding:16px">Select resources above to find matching scenes</div>';
   }
-
-  h += `</div></div>`;
-  document.getElementById("dayPanelMount").innerHTML = h;
+  h+='</div></div>';
+  document.getElementById("dayPanelMount").innerHTML=h;
 }
 
-function renderTogCat(key, label, current, color) {
-  let h = `<div class="res-cat"><div class="rc-label">${label}</div><div class="tog-row">`;
-  cats[key].forEach(o => {
-    const on = current.includes(o);
-    h += `<button class="tog${on?" on":""}" style="--tc:${color}" onclick="toggleAvail('${key}',${JSON.stringify(o).replace(/'/g,"\\'")})">${esc(o)}</button>`;
+function togCat(key,label,current,color){
+  var h='<div class="res-cat"><div class="rc-label">'+label+'</div><div class="tog-row">';
+  cats[key].forEach(function(o){
+    var on=current.indexOf(o)>=0;
+    h+='<button class="tog'+(on?' on':'')+'" style="--tc:'+color+'" onclick="toggleAvail(\''+key+'\','+JSON.stringify(o)+')">'+esc(o)+'</button>';
   });
-  h += `</div></div>`;
-  return h;
+  return h+'</div></div>';
 }
 
 // ─── ACTIONS ─────────────────────────────────────────────────
-function prevMo(){if(mo===0){mo=11;yr--;}else mo--;render();}
-function nextMo(){if(mo===11){mo=0;yr++;}else mo++;render();}
-function selectDay(d){selDay=selDay===d?null:d;dpAvail={cast:[],locations:[],timeOfDay:[],props:[],weather:[]};render();if(selDay)renderDayPanel(selDay);}
-function closeDay(){selDay=null;document.getElementById("dayPanelMount").innerHTML="";render();}
+function prevMo(){if(mo===0){mo=11;yr--}else mo--;render()}
+function nextMo(){if(mo===11){mo=0;yr++}else mo++;render()}
+function selectDay(d){selDay=selDay===d?null:d;dpAvail={cast:[],locations:[],timeOfDay:[],props:[],weather:[]};render();if(selDay)renderDayPanel(selDay)}
+function closeDay(){selDay=null;document.getElementById("dayPanelMount").innerHTML="";render()}
 
-function toggleAvail(key, val) {
-  const i = dpAvail[key].indexOf(val);
-  if(i>=0) dpAvail[key].splice(i,1); else dpAvail[key].push(val);
-  if(selDay) renderDayPanel(selDay);
+function toggleAvail(key,val){
+  var i=dpAvail[key].indexOf(val);
+  if(i>=0)dpAvail[key].splice(i,1);else dpAvail[key].push(val);
+  if(selDay)renderDayPanel(selDay);
 }
 
-function addToDay(sid, day) {
-  const k = dkey(day);
-  if(!sched[k]) sched[k]=[];
-  if(!sched[k].includes(sid)) sched[k].push(sid);
-  render(); if(selDay) renderDayPanel(selDay);
+function addToDay(sid,day){
+  var k=dkey(day);
+  if(!sched[k])sched[k]=[];
+  if(sched[k].indexOf(sid)<0)sched[k].push(sid);
+  render();if(selDay)renderDayPanel(selDay);
+  assignOnSheet(k,sid);
 }
 
-function remFromDay(sid, k) {
-  if(sched[k]) sched[k] = sched[k].filter(i=>i!==sid);
-  if(sched[k] && !sched[k].length) delete sched[k];
-  render(); if(selDay) renderDayPanel(selDay);
+function remFromDay(sid,k){
+  if(sched[k])sched[k]=sched[k].filter(function(i){return i!==sid});
+  if(sched[k]&&!sched[k].length)delete sched[k];
+  render();if(selDay)renderDayPanel(selDay);
+  unassignOnSheet(k,sid);
 }
 
-function startDrag(id, fromKey) { dragId=id; dragFromKey=fromKey; }
-function dropOnDay(e, day) {
+function startDrag(id,fromKey){dragId=id;dragFromKey=fromKey}
+function dropOnDay(e,day){
   e.preventDefault();
-  if(!dragId) return;
-  const toK = dkey(day);
-  if(dragFromKey) { sched[dragFromKey]=(sched[dragFromKey]||[]).filter(i=>i!==dragId); if(!sched[dragFromKey].length)delete sched[dragFromKey]; }
-  if(!sched[toK])sched[toK]=[];
-  if(!sched[toK].includes(dragId)) sched[toK].push(dragId);
-  dragId=null; dragFromKey=null;
-  render(); if(selDay) renderDayPanel(selDay);
+  if(!dragId)return;
+  var toK=dkey(day);
+  if(dragFromKey){
+    sched[dragFromKey]=(sched[dragFromKey]||[]).filter(function(i){return i!==dragId});
+    if(!sched[dragFromKey].length)delete sched[dragFromKey];
+    if(!sched[toK])sched[toK]=[];
+    if(sched[toK].indexOf(dragId)<0)sched[toK].push(dragId);
+    moveOnSheet(dragFromKey,toK,dragId);
+  } else {
+    if(!sched[toK])sched[toK]=[];
+    if(sched[toK].indexOf(dragId)<0)sched[toK].push(dragId);
+    assignOnSheet(toK,dragId);
+  }
+  dragId=null;dragFromKey=null;
+  render();if(selDay)renderDayPanel(selDay);
 }
 
-// ─── EDITOR MODAL ────────────────────────────────────────────
-function openEditor(id) {
-  const isNew = !id;
-  const s = isNew ? {id:"",name:"",cast:[],locations:[],timeOfDay:[],lighting:[],weather:[],props:[],extras:[],complexity:3,notes:""} : JSON.parse(JSON.stringify(getScene(id)));
-  window._editScene = s;
+// ─── EDITOR ──────────────────────────────────────────────────
+function openEditor(id){
+  var isNew=!id;
+  var s=isNew?{id:"",name:"",cast:[],locations:[],timeOfDay:[],lighting:[],weather:[],props:[],extras:[],complexity:3,notes:""}:JSON.parse(JSON.stringify(getScene(id)));
+  window._ed=s;
   renderEditor(isNew);
 }
 
-function renderEditor(isNew) {
-  const s = window._editScene;
-  let h = `<div class="modal-bg" onclick="closeModal()"><div class="modal" onclick="event.stopPropagation()">`;
-  h += `<h2>${isNew?"New Scene":"Edit Scene"}</h2>`;
-  h += `<div class="field"><label>Scene Name</label><input id="ed-name" value="${esc(s.name)}" onchange="window._editScene.name=this.value"></div>`;
-
-  ["cast","locations","timeOfDay","lighting","weather","props","extras"].forEach(k => {
-    const labels = {cast:"Cast",locations:"Location",timeOfDay:"Time of Day",lighting:"Lighting",weather:"Weather",props:"Props & Vehicles",extras:"Extras"};
-    h += `<div class="field"><label>${labels[k]}</label><div class="tog-row">`;
-    cats[k].forEach(o => {
-      const on = (s[k]||[]).includes(o);
-      h += `<button class="tog${on?" on":""}" onclick="toggleEdit('${k}',${JSON.stringify(o).replace(/'/g,"\\'")})">${esc(o)}</button>`;
+function renderEditor(isNew){
+  var s=window._ed;
+  var h='<div class="modal-bg" onclick="closeModal()"><div class="modal" onclick="event.stopPropagation()">';
+  h+='<h2>'+(isNew?'New Scene':'Edit Scene')+'</h2>';
+  h+='<div class="field"><label>Scene Name</label><input id="ed-name" value="'+esc(s.name)+'" onchange="window._ed.name=this.value"></div>';
+  var labels={cast:"Cast",locations:"Location",timeOfDay:"Time of Day",lighting:"Lighting",weather:"Weather",props:"Props & Vehicles",extras:"Extras"};
+  ["cast","locations","timeOfDay","lighting","weather","props","extras"].forEach(function(k){
+    h+='<div class="field"><label>'+labels[k]+'</label><div class="tog-row">';
+    cats[k].forEach(function(o){
+      var on=(s[k]||[]).indexOf(o)>=0;
+      h+='<button class="tog'+(on?' on':'')+'" onclick="togEdit(\''+k+'\','+JSON.stringify(o)+')">'+esc(o)+'</button>';
     });
-    h += `</div></div>`;
+    h+='</div></div>';
   });
-
-  h += `<div class="field"><label>Complexity</label><div class="cx-row">`;
-  [1,2,3,4,5].forEach(n => {
-    h += `<button class="cx-btn" onclick="setEditCx(${n})" style="border:${s.complexity===n?`2px solid ${CC[n]}`:"1px solid #3a342e"};background:${s.complexity===n?CC[n]+"33":"#1a1714"};color:${s.complexity===n?CC[n]:"#8a7e72"}">${CL[n]}</button>`;
+  h+='<div class="field"><label>Complexity</label><div class="cx-row">';
+  [1,2,3,4,5].forEach(function(n){
+    h+='<button class="cx-btn" onclick="setCx('+n+')" style="border:'+(s.complexity===n?'2px solid '+CC[n]:'1px solid #3a342e')+';background:'+(s.complexity===n?CC[n]+'33':'#1a1714')+';color:'+(s.complexity===n?CC[n]:'#8a7e72')+'">'+CL[n]+'</button>';
   });
-  h += `</div></div>`;
-
-  h += `<div class="field"><label>Notes</label><textarea id="ed-notes" rows="3" onchange="window._editScene.notes=this.value">${esc(s.notes)}</textarea></div>`;
-
-  h += `<div style="display:flex;justify-content:space-between;margin-top:8px"><div style="display:flex;gap:8px"><button class="mbtn gold" onclick="saveEdit()">Save</button><button class="mbtn ghost" onclick="closeModal()">Cancel</button></div>`;
-  if(!isNew) h += `<button class="mbtn red" onclick="deleteEdit('${s.id}')">Delete</button>`;
-  h += `</div></div></div>`;
-
-  document.getElementById("modalMount").innerHTML = h;
+  h+='</div></div>';
+  h+='<div class="field"><label>Notes</label><textarea id="ed-notes" rows="3" onchange="window._ed.notes=this.value">'+esc(s.notes)+'</textarea></div>';
+  h+='<div style="display:flex;justify-content:space-between;margin-top:8px"><div style="display:flex;gap:8px"><button class="mbtn gold" onclick="saveEdit()">Save</button><button class="mbtn ghost" onclick="closeModal()">Cancel</button></div>';
+  if(!isNew) h+='<button class="mbtn red" onclick="deleteEdit(\''+s.id+'\')">Delete</button>';
+  h+='</div></div></div>';
+  document.getElementById("modalMount").innerHTML=h;
 }
 
-function toggleEdit(key, val) {
-  const s = window._editScene;
-  if(!s[key]) s[key]=[];
-  const i = s[key].indexOf(val);
-  if(i>=0) s[key].splice(i,1); else s[key].push(val);
+function togEdit(key,val){
+  var s=window._ed;if(!s[key])s[key]=[];
+  var i=s[key].indexOf(val);
+  if(i>=0)s[key].splice(i,1);else s[key].push(val);
   renderEditor(!s.id);
 }
 
-function setEditCx(n) { window._editScene.complexity=n; renderEditor(!window._editScene.id); }
+function setCx(n){window._ed.complexity=n;renderEditor(!window._ed.id)}
 
-function saveEdit() {
-  const s = window._editScene;
-  s.name = document.getElementById("ed-name").value;
-  s.notes = document.getElementById("ed-notes").value;
-  if(!s.name.trim()) return;
-  if(!s.id) s.id = "s" + Date.now();
-  const idx = scenes.findIndex(x=>x.id===s.id);
-  if(idx>=0) scenes[idx]=s; else scenes.push(s);
-  closeModal(); render(); if(selDay) renderDayPanel(selDay);
+function saveEdit(){
+  var s=window._ed;
+  s.name=document.getElementById("ed-name").value;
+  s.notes=document.getElementById("ed-notes").value;
+  if(!s.name.trim())return;
+  if(!s.id)s.id="s"+Date.now();
+  var idx=-1;
+  for(var i=0;i<scenes.length;i++){if(scenes[i].id===s.id){idx=i;break}}
+  if(idx>=0)scenes[idx]=s;else scenes.push(s);
+  closeModal();render();if(selDay)renderDayPanel(selDay);
+  saveSceneToSheet(s);
+  toast("Scene saved","ok");
 }
 
-function deleteEdit(id) {
-  if(!confirm("Delete this scene?")) return;
-  scenes = scenes.filter(s=>s.id!==id);
-  Object.keys(sched).forEach(k => { sched[k]=sched[k].filter(i=>i!==id); if(!sched[k].length)delete sched[k]; });
-  closeModal(); render(); if(selDay) renderDayPanel(selDay);
+function deleteEdit(id){
+  if(!confirm("Delete this scene?"))return;
+  scenes=scenes.filter(function(s){return s.id!==id});
+  Object.keys(sched).forEach(function(k){sched[k]=sched[k].filter(function(i){return i!==id});if(!sched[k].length)delete sched[k]});
+  closeModal();render();if(selDay)renderDayPanel(selDay);
+  deleteSceneFromSheet(id);
+  toast("Scene deleted","ok");
 }
 
-function closeModal() { document.getElementById("modalMount").innerHTML=""; }
+function closeModal(){document.getElementById("modalMount").innerHTML=""}
 
-// ─── SETTINGS MODAL ──────────────────────────────────────────
-let settingsTab = "cast";
-let settingsRen = null, settingsRenVal = "";
+// ─── SETTINGS ────────────────────────────────────────────────
+var sTab="cast",sRen=null,sRenVal="";
 
-function openSettings() { settingsTab="cast"; settingsRen=null; renderSettings(); }
+function openSettings(){sTab="cast";sRen=null;renderSettings()}
 
-function renderSettings() {
-  const tabs = [{k:"cast",l:"Cast"},{k:"locations",l:"Locations"},{k:"timeOfDay",l:"Time of Day"},{k:"lighting",l:"Lighting"},{k:"weather",l:"Weather"},{k:"props",l:"Props"},{k:"extras",l:"Extras"}];
-
-  let h = `<div class="modal-bg" onclick="closeModal()"><div class="modal" style="padding:0;max-width:680px" onclick="event.stopPropagation()"><div class="settings-wrap">`;
-
-  h += `<div class="settings-nav"><div class="sn-title">Settings</div>`;
-  tabs.forEach(t => h += `<div class="sn-item${settingsTab===t.k?" active":""}" onclick="settingsTab='${t.k}';settingsRen=null;renderSettings()">${t.l} (${cats[t.k].length})</div>`);
-  h += `<div style="border-top:1px solid #3a342e;margin:12px 0"></div><div class="sn-item" style="color:#c94040" onclick="closeModal()">Close</div></div>`;
-
-  h += `<div class="settings-body">`;
-  h += `<div style="display:flex;gap:8px;margin-bottom:14px"><input id="set-new" placeholder="Add new..." style="flex:1;padding:7px 10px;border-radius:5px;border:1px solid #3a342e;background:#141210;color:#e8e0d6;font-size:13px;outline:none" onkeydown="if(event.key==='Enter')addCatItem()"><button class="mbtn gold" style="padding:7px 14px" onclick="addCatItem()">Add</button></div>`;
-
-  cats[settingsTab].forEach((v,i) => {
-    h += `<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:5px;margin-bottom:1px;background:${i%2?"rgba(26,23,20,.53)":"transparent"}">`;
-    if(settingsRen===v) {
-      h += `<input id="set-ren" value="${esc(settingsRenVal)}" style="flex:1;padding:3px 7px;border-radius:4px;border:1px solid #c49b2a66;background:#141210;color:#e8e0d6;font-size:12px;outline:none" onkeydown="if(event.key==='Enter')renameCatItem('${esc(v)}')">`;
-      h += `<button class="mbtn gold" style="padding:3px 8px;font-size:10px" onclick="renameCatItem('${esc(v)}')">Save</button>`;
-      h += `<button class="mbtn ghost" style="padding:3px 6px;font-size:10px" onclick="settingsRen=null;renderSettings()">Esc</button>`;
+function renderSettings(){
+  var tabs=[{k:"cast",l:"Cast"},{k:"locations",l:"Locations"},{k:"timeOfDay",l:"Time of Day"},{k:"lighting",l:"Lighting"},{k:"weather",l:"Weather"},{k:"props",l:"Props"},{k:"extras",l:"Extras"}];
+  var h='<div class="modal-bg" onclick="closeModal()"><div class="modal" style="padding:0;max-width:680px" onclick="event.stopPropagation()"><div class="settings-wrap">';
+  h+='<div class="settings-nav"><div class="sn-title">Settings</div>';
+  tabs.forEach(function(t){h+='<div class="sn-item'+(sTab===t.k?' active':'')+'" onclick="sTab=\''+t.k+'\';sRen=null;renderSettings()">'+t.l+' ('+cats[t.k].length+')</div>'});
+  h+='<div style="border-top:1px solid #3a342e;margin:12px 0"></div><div class="sn-item" style="color:#4a9e6e;font-weight:600" onclick="saveCatsToSheet()">Save Settings</div>';
+  h+='<div class="sn-item" style="color:#c94040" onclick="closeModal()">Close</div></div>';
+  h+='<div class="settings-body">';
+  h+='<div style="display:flex;gap:8px;margin-bottom:14px"><input id="set-new" placeholder="Add new..." style="flex:1;padding:7px 10px;border-radius:5px;border:1px solid #3a342e;background:#141210;color:#e8e0d6;font-size:13px;outline:none" onkeydown="if(event.key===\'Enter\')addCat()"><button class="mbtn gold" style="padding:7px 14px" onclick="addCat()">Add</button></div>';
+  cats[sTab].forEach(function(v,i){
+    h+='<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:5px;margin-bottom:1px;background:'+(i%2?'rgba(26,23,20,.53)':'transparent')+'">';
+    if(sRen===v){
+      h+='<input id="set-ren" value="'+esc(sRenVal)+'" style="flex:1;padding:3px 7px;border-radius:4px;border:1px solid #c49b2a66;background:#141210;color:#e8e0d6;font-size:12px;outline:none" onkeydown="if(event.key===\'Enter\')renameCat(\''+esc(v)+'\')">';
+      h+='<button class="mbtn gold" style="padding:3px 8px;font-size:10px" onclick="renameCat(\''+esc(v)+'\')">Save</button>';
+      h+='<button class="mbtn ghost" style="padding:3px 6px;font-size:10px" onclick="sRen=null;renderSettings()">Esc</button>';
     } else {
-      h += `<span style="flex:1;font-size:12px;color:#e8e0d6">${esc(v)}</span>`;
-      h += `<span style="font-size:9px;color:#5a5248">${scenes.filter(s=>Array.isArray(s[settingsTab])&&s[settingsTab].includes(v)).length}×</span>`;
-      h += `<button style="padding:2px 7px;border-radius:3px;border:1px solid #3a342e;background:none;color:#a09585;font-size:10px;cursor:pointer" onclick="settingsRen='${esc(v)}';settingsRenVal='${esc(v)}';renderSettings()">Rename</button>`;
-      h += `<button style="padding:2px 7px;border-radius:3px;border:1px solid #c9404044;background:#c9404011;color:#c94040;font-size:10px;cursor:pointer" onclick="delCatItem('${esc(v)}')">Del</button>`;
+      h+='<span style="flex:1;font-size:12px;color:#e8e0d6">'+esc(v)+'</span>';
+      h+='<span style="font-size:9px;color:#5a5248">'+scenes.filter(function(s){return Array.isArray(s[sTab])&&s[sTab].indexOf(v)>=0}).length+'&times;</span>';
+      h+='<button style="padding:2px 7px;border-radius:3px;border:1px solid #3a342e;background:none;color:#a09585;font-size:10px;cursor:pointer" onclick="sRen=\''+esc(v)+'\';sRenVal=\''+esc(v)+'\';renderSettings()">Rename</button>';
+      h+='<button style="padding:2px 7px;border-radius:3px;border:1px solid #c9404044;background:#c9404011;color:#c94040;font-size:10px;cursor:pointer" onclick="delCat(\''+esc(v)+'\')">Del</button>';
     }
-    h += `</div>`;
+    h+='</div>';
   });
-  h += `<p style="font-size:10px;color:#5a5248;margin-top:12px">Renaming auto-updates all scenes.</p>`;
-  h += `</div></div></div></div>`;
-
-  document.getElementById("modalMount").innerHTML = h;
-  if(settingsRen) { const el=document.getElementById("set-ren"); if(el)el.focus(); }
+  h+='<p style="font-size:10px;color:#5a5248;margin-top:12px">Renaming auto-updates all scenes. Click "Save Settings" to sync to Google Sheets.</p>';
+  h+='</div></div></div></div>';
+  document.getElementById("modalMount").innerHTML=h;
+  if(sRen){var el=document.getElementById("set-ren");if(el)el.focus()}
 }
 
-function addCatItem() {
-  const el = document.getElementById("set-new");
-  const v = el.value.trim();
-  if(!v||cats[settingsTab].includes(v)) return;
-  cats[settingsTab].push(v);
-  el.value="";
+function addCat(){
+  var el=document.getElementById("set-new");
+  var v=el.value.trim();
+  if(!v||cats[sTab].indexOf(v)>=0)return;
+  cats[sTab].push(v);el.value="";renderSettings();
+}
+
+function delCat(v){
+  cats[sTab]=cats[sTab].filter(function(x){return x!==v});
   renderSettings();
 }
 
-function delCatItem(v) {
-  cats[settingsTab] = cats[settingsTab].filter(x=>x!==v);
-  renderSettings();
-}
-
-function renameCatItem(old) {
-  const nw = document.getElementById("set-ren").value.trim();
-  if(!nw||nw===old){settingsRen=null;renderSettings();return;}
-  cats[settingsTab] = cats[settingsTab].map(x=>x===old?nw:x);
-  scenes.forEach(s => { if(Array.isArray(s[settingsTab])) s[settingsTab]=s[settingsTab].map(x=>x===old?nw:x); });
-  settingsRen=null;
-  renderSettings();
+function renameCat(old){
+  var nw=document.getElementById("set-ren").value.trim();
+  if(!nw||nw===old){sRen=null;renderSettings();return}
+  cats[sTab]=cats[sTab].map(function(x){return x===old?nw:x});
+  scenes.forEach(function(s){if(Array.isArray(s[sTab]))s[sTab]=s[sTab].map(function(x){return x===old?nw:x})});
+  sRen=null;renderSettings();
 }
 
 // ─── ESCAPE HTML ─────────────────────────────────────────────
-function esc(s) { if(!s)return""; const d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
+function esc(s){if(!s)return"";var d=document.createElement("div");d.textContent=s;return d.innerHTML}
 
-// ─── INIT ────────────────────────────────────────────────────
+// ─── START ───────────────────────────────────────────────────
 render();
 loadFromSheet();
 </script>
