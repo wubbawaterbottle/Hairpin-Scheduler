@@ -117,12 +117,8 @@ button,input,textarea,select{font-family:inherit}
 <div id="modalMount"></div>
 
 <script>
-// ═══════════════════════════════════════════════════════════════
-// PASTE YOUR APPS SCRIPT URL HERE
 const API_URL = "https://script.google.com/macros/s/AKfycby9FrPqkOGFPcIOwHuDwk88ctBbe98Y6Wbw_MczLsuDQbY2SW5OlWJt8AtHvuDRon5b/exec";
-// ═══════════════════════════════════════════════════════════════
 
-// ─── DEFAULT CATEGORIES (used if sheet is empty) ─────────────
 const DEFAULT_CATS = {
   cast:["Tom","Kim","Rhodes","Cobb/Drummond","Peter","Commissioner","Lawyer/Hadley","Forensics Officer"],
   locations:["Reese Air Force Base","Cook's Garage","Winery","Landfill","Police Station","McDougal Building","Kim's Apartment","Tom's Apartment","Donut Shop","Police Cruiser/Rural Road","Whataburger","Wind Farm/Dirt Field","Country Roads","The Void"],
@@ -133,7 +129,6 @@ const DEFAULT_CATS = {
   extras:["Winery Guards (3-5)","Cook's Bar Patrons (12)","Storage Bay Goons (3)","Burly Guard (1)","Landfill Mercs (3-4)","Reese Mercs (7)","Uniformed Police (4-6)","Ambulance Crew (2)","Night Receptionist (1)"]
 };
 
-// ─── STATE (starts empty — loads from sheet) ─────────────────
 let cats = JSON.parse(JSON.stringify(DEFAULT_CATS));
 let scenes = [];
 let sched = {};
@@ -147,12 +142,17 @@ const MO=["January","February","March","April","May","June","July","August","Sep
 const DN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 function daysIn(y,m){return new Date(y,m+1,0).getDate()}
 function firstDow(y,m){return new Date(y,m,1).getDay()}
-function dk(y,m,d){return y+"-"+String(m+1).padStart(2,"0")+"-"+String(d).padStart(2,"0")}
-function dkey(d){return dk(yr,mo,d)}
+function dkk(y,m,d){return y+"-"+String(m+1).padStart(2,"0")+"-"+String(d).padStart(2,"0")}
+function dkey(d){return dkk(yr,mo,d)}
 function getScene(id){return scenes.find(function(s){return s.id===id})}
 function scheduledSet(){return new Set(Object.values(sched).flat())}
 
-// ─── JSONP ───────────────────────────────────────────────────
+// ── SAFE STRING ENCODE/DECODE for onclick ────────────────────
+// Instead of JSON.stringify in HTML attributes, use base64
+function enc(s){return btoa(unescape(encodeURIComponent(s)))}
+function dec(s){return decodeURIComponent(escape(atob(s)))}
+
+// ── JSONP ────────────────────────────────────────────────────
 function api(params){
   return new Promise(function(resolve){
     var cb="jcb_"+Date.now()+"_"+Math.floor(Math.random()*10000);
@@ -164,71 +164,40 @@ function api(params){
     document.body.appendChild(sc);
   });
 }
+function apiWrite(payload){return api("payload="+encodeURIComponent(JSON.stringify(payload)))}
 
-// Small helper — send a write payload
-function apiWrite(payload){
-  return api("payload="+encodeURIComponent(JSON.stringify(payload)));
-}
-
-// ─── TOAST ───────────────────────────────────────────────────
 function toast(msg,type){
   var t=document.getElementById("toast");
   t.textContent=msg;t.className="toast "+type+" show";
   setTimeout(function(){t.className="toast"},3000);
 }
 
-// ─── LOAD FROM SHEET ─────────────────────────────────────────
+// ── LOAD ─────────────────────────────────────────────────────
 async function loadFromSheet(){
-  var data = await api("action=getAll");
+  var data=await api("action=getAll");
   if(data.error){toast("Load failed: "+data.error,"err");render();return}
-  if(data.scenes && data.scenes.length>0) scenes=data.scenes;
-  if(data.schedule) sched=data.schedule;
-  if(data.cats){
-    Object.keys(data.cats).forEach(function(k){if(data.cats[k].length>0)cats[k]=data.cats[k]});
-  }
+  if(data.scenes&&data.scenes.length>0)scenes=data.scenes;
+  if(data.schedule)sched=data.schedule;
+  if(data.cats){Object.keys(data.cats).forEach(function(k){if(data.cats[k].length>0)cats[k]=data.cats[k]})}
   toast("Loaded from Google Sheets","ok");
   render();
 }
 
-// ─── INDIVIDUAL SAVES (no bulk) ──────────────────────────────
-async function saveSceneToSheet(scene){
-  var r=await apiWrite({action:"saveScene",scene:scene});
-  if(r.error) toast("Save failed: "+r.error,"err");
-}
+// ── INDIVIDUAL SAVES ─────────────────────────────────────────
+async function saveSceneToSheet(scene){var r=await apiWrite({action:"saveScene",scene:scene});if(r.error)toast("Save failed: "+r.error,"err")}
+async function deleteSceneFromSheet(id){var r=await apiWrite({action:"deleteScene",id:id});if(r.error)toast("Delete failed: "+r.error,"err")}
+async function assignOnSheet(dateKey,sceneId){var r=await apiWrite({action:"assignScene",dateKey:dateKey,sceneId:sceneId});if(r.error)toast("Assign failed: "+r.error,"err")}
+async function unassignOnSheet(dateKey,sceneId){var r=await apiWrite({action:"unassignScene",dateKey:dateKey,sceneId:sceneId});if(r.error)toast("Unassign failed: "+r.error,"err")}
+async function moveOnSheet(fromKey,toKey,sceneId){var r=await apiWrite({action:"moveScene",fromKey:fromKey,toKey:toKey,sceneId:sceneId});if(r.error)toast("Move failed: "+r.error,"err")}
+async function saveCatsToSheet(){var r=await apiWrite({action:"saveCategories",cats:cats});if(r.error)toast("Settings save failed: "+r.error,"err");else toast("Settings saved","ok")}
 
-async function deleteSceneFromSheet(id){
-  var r=await apiWrite({action:"deleteScene",id:id});
-  if(r.error) toast("Delete failed: "+r.error,"err");
-}
-
-async function assignOnSheet(dateKey,sceneId){
-  var r=await apiWrite({action:"assignScene",dateKey:dateKey,sceneId:sceneId});
-  if(r.error) toast("Assign failed: "+r.error,"err");
-}
-
-async function unassignOnSheet(dateKey,sceneId){
-  var r=await apiWrite({action:"unassignScene",dateKey:dateKey,sceneId:sceneId});
-  if(r.error) toast("Unassign failed: "+r.error,"err");
-}
-
-async function moveOnSheet(fromKey,toKey,sceneId){
-  var r=await apiWrite({action:"moveScene",fromKey:fromKey,toKey:toKey,sceneId:sceneId});
-  if(r.error) toast("Move failed: "+r.error,"err");
-}
-
-async function saveCatsToSheet(){
-  var r=await apiWrite({action:"saveCategories",cats:cats});
-  if(r.error) toast("Settings save failed: "+r.error,"err");
-  else toast("Settings saved","ok");
-}
-
-// ─── RENDER ──────────────────────────────────────────────────
+// ── RENDER ───────────────────────────────────────────────────
 function render(){renderLeft();renderCal();if(selDay)renderDayPanel(selDay)}
 
 function renderLeft(){
   var el=document.getElementById("leftPanel");
   var sset=scheduledSet();
-  var unsched=scenes.filter(function(s){return !sset.has(s.id)}).sort(function(a,b){return b.complexity-a.complexity||b.cast.length-a.cast.length});
+  var unsched=scenes.filter(function(s){return!sset.has(s.id)}).sort(function(a,b){return b.complexity-a.complexity||b.cast.length-a.cast.length});
   var h='<div class="left-title">Unscheduled ('+unsched.length+')</div>';
   unsched.forEach(function(s){
     h+='<div class="chip" draggable="true" ondragstart="startDrag(\''+s.id+'\',null)" onclick="openEditor(\''+s.id+'\')" style="background:linear-gradient(135deg,'+CC[s.complexity]+'22,'+CC[s.complexity]+'11);border:1.5px solid '+CC[s.complexity]+'55;border-left:4px solid '+CC[s.complexity]+'">';
@@ -237,7 +206,7 @@ function renderLeft(){
     s.timeOfDay.forEach(function(t){h+='<span class="tod">'+esc(t)+'</span>'});
     h+='</div></div>';
   });
-  if(!unsched.length) h+='<div style="font-size:11px;color:#5a5248;text-align:center;padding:16px">No scenes yet — click + New Scene</div>';
+  if(!unsched.length)h+='<div style="font-size:11px;color:#5a5248;text-align:center;padding:16px">No scenes yet — click + New Scene</div>';
   h+='<div class="legend"><div class="lg-title">Complexity</div>';
   [1,2,3,4,5].forEach(function(n){h+='<div class="lg-item"><div class="lg-dot" style="background:'+CC[n]+'"></div><div class="lg-label">'+CL[n]+'</div></div>'});
   h+='</div>';
@@ -248,45 +217,43 @@ function renderCal(){
   var el=document.getElementById("calWrap");
   var dim=daysIn(yr,mo),fd=firstDow(yr,mo);
   var sset=scheduledSet();
-  var unsched=scenes.filter(function(s){return !sset.has(s.id)});
+  var unsched=scenes.filter(function(s){return!sset.has(s.id)});
   var h='<div class="cal-nav"><button onclick="prevMo()">&#8249;</button><h2>'+MO[mo]+' '+yr+'</h2><button onclick="nextMo()">&#8250;</button></div>';
   h+='<div class="cal-grid">';
   DN.forEach(function(d){h+='<div class="cal-head">'+d+'</div>'});
-  for(var i=0;i<fd;i++) h+='<div></div>';
+  for(var i=0;i<fd;i++)h+='<div></div>';
   for(var i=1;i<=dim;i++){
     var k=dkey(i);
     var ds=(sched[k]||[]).map(getScene).filter(Boolean);
-    var sel=selDay===i;
-    var we=(fd+i-1)%7===0||(fd+i-1)%7===6;
+    var sel=selDay===i,we=(fd+i-1)%7===0||(fd+i-1)%7===6;
     var tc=ds.reduce(function(a,s){return a+s.complexity},0);
     h+='<div class="cal-day'+(sel?' sel':'')+(we?' we':'')+'" onclick="selectDay('+i+')" ondragover="event.preventDefault()" ondrop="dropOnDay(event,'+i+')">';
     h+='<div class="dnum"><span>'+i+'</span>';
-    if(ds.length) h+='<span class="badge" style="background:'+(tc>8?'#c9404033':'#c49b2a22')+';color:'+(tc>8?'#e8a0a0':'#c49b2a')+'">'+ds.length+'s</span>';
+    if(ds.length)h+='<span class="badge" style="background:'+(tc>8?'#c9404033':'#c49b2a22')+';color:'+(tc>8?'#e8a0a0':'#c49b2a')+'">'+ds.length+'s</span>';
     h+='</div>';
     ds.slice(0,3).forEach(function(s){
       h+='<div class="mini-chip" draggable="true" ondragstart="event.stopPropagation();startDrag(\''+s.id+'\',\''+k+'\')" style="background:'+CC[s.complexity]+'22;border-left:2px solid '+CC[s.complexity]+'">'+esc(s.name)+'</div>';
     });
-    if(ds.length>3) h+='<div style="font-size:8px;color:#6a5e52;text-align:center">+'+(ds.length-3)+'</div>';
+    if(ds.length>3)h+='<div style="font-size:8px;color:#6a5e52;text-align:center">+'+(ds.length-3)+'</div>';
     h+='</div>';
   }
-  h+='</div>';
-  h+='<div class="stats">';
-  var shootDays=Object.values(sched).filter(function(v){return v.length>0}).length;
-  [{v:shootDays,l:"Shoot Days",c:"#e8d5a0"},{v:sset.size,l:"Scheduled",c:"#e8d5a0"},{v:unsched.length,l:"Remaining",c:unsched.length?"#c49b2a":"#4a9e6e"},{v:scenes.length,l:"Total",c:"#e8d5a0"}].forEach(function(o){
+  h+='</div><div class="stats">';
+  var sd=Object.values(sched).filter(function(v){return v.length>0}).length;
+  [{v:sd,l:"Shoot Days",c:"#e8d5a0"},{v:sset.size,l:"Scheduled",c:"#e8d5a0"},{v:unsched.length,l:"Remaining",c:unsched.length?"#c49b2a":"#4a9e6e"},{v:scenes.length,l:"Total",c:"#e8d5a0"}].forEach(function(o){
     h+='<div class="s"><div class="n" style="color:'+o.c+'">'+o.v+'</div><div class="l">'+o.l+'</div></div>';
   });
   h+='</div>';
   el.innerHTML=h;
 }
 
-// ─── DAY PANEL ───────────────────────────────────────────────
+// ── DAY PANEL ────────────────────────────────────────────────
 var dpAvail={cast:[],locations:[],timeOfDay:[],props:[],weather:[]};
 
 function renderDayPanel(day){
   var k=dkey(day);
   var assigned=(sched[k]||[]).map(getScene).filter(Boolean);
   var sset=scheduledSet();
-  var unsched=scenes.filter(function(s){return !sset.has(s.id)});
+  var unsched=scenes.filter(function(s){return!sset.has(s.id)});
   var tc=assigned.reduce(function(a,s){return a+s.complexity},0);
   var hasF=dpAvail.cast.length||dpAvail.locations.length||dpAvail.timeOfDay.length||dpAvail.props.length||dpAvail.weather.length;
   var matches=!hasF?[]:unsched.filter(function(s){
@@ -317,11 +284,11 @@ function renderDayPanel(day){
   h+='</div>';
   if(hasF){
     h+='<div class="dp-section">Scenes That Fit ('+matches.length+')</div>';
-    if(!matches.length) h+='<div style="font-size:11px;color:#5a5248;text-align:center;padding:12px">No unscheduled scenes match</div>';
+    if(!matches.length)h+='<div style="font-size:11px;color:#5a5248;text-align:center;padding:12px">No unscheduled scenes match</div>';
     matches.forEach(function(s){
       h+='<div class="match-item"><div class="mi-info" onclick="openEditor(\''+s.id+'\')" style="background:'+CC[s.complexity]+'15;border:1px solid '+CC[s.complexity]+'44;border-left:3px solid '+CC[s.complexity]+'"><div class="mi-name">'+esc(s.name)+'</div><div class="mi-meta">'+s.cast.join(", ")+' &middot; '+s.locations.join(", ")+'</div></div><button class="mi-add" onclick="addToDay(\''+s.id+'\','+day+')">+ Add</button></div>';
     });
-  } else {
+  }else{
     h+='<div style="font-size:11px;color:#5a5248;text-align:center;padding:16px">Select resources above to find matching scenes</div>';
   }
   h+='</div></div>';
@@ -330,20 +297,21 @@ function renderDayPanel(day){
 
 function togCat(key,label,current,color){
   var h='<div class="res-cat"><div class="rc-label">'+label+'</div><div class="tog-row">';
-  cats[key].forEach(function(o){
+  cats[key].forEach(function(o,idx){
     var on=current.indexOf(o)>=0;
-    h+='<button class="tog'+(on?' on':'')+'" style="--tc:'+color+'" onclick="toggleAvail(\''+key+'\','+JSON.stringify(o)+')">'+esc(o)+'</button>';
+    h+='<button class="tog'+(on?' on':'')+'" style="--tc:'+color+'" onclick="toggleAvail(\''+key+'\','+idx+')">'+esc(o)+'</button>';
   });
   return h+'</div></div>';
 }
 
-// ─── ACTIONS ─────────────────────────────────────────────────
+// ── ACTIONS ──────────────────────────────────────────────────
 function prevMo(){if(mo===0){mo=11;yr--}else mo--;render()}
 function nextMo(){if(mo===11){mo=0;yr++}else mo++;render()}
 function selectDay(d){selDay=selDay===d?null:d;dpAvail={cast:[],locations:[],timeOfDay:[],props:[],weather:[]};render();if(selDay)renderDayPanel(selDay)}
 function closeDay(){selDay=null;document.getElementById("dayPanelMount").innerHTML="";render()}
 
-function toggleAvail(key,val){
+function toggleAvail(key,idx){
+  var val=cats[key][idx];
   var i=dpAvail[key].indexOf(val);
   if(i>=0)dpAvail[key].splice(i,1);else dpAvail[key].push(val);
   if(selDay)renderDayPanel(selDay);
@@ -366,8 +334,7 @@ function remFromDay(sid,k){
 
 function startDrag(id,fromKey){dragId=id;dragFromKey=fromKey}
 function dropOnDay(e,day){
-  e.preventDefault();
-  if(!dragId)return;
+  e.preventDefault();if(!dragId)return;
   var toK=dkey(day);
   if(dragFromKey){
     sched[dragFromKey]=(sched[dragFromKey]||[]).filter(function(i){return i!==dragId});
@@ -375,7 +342,7 @@ function dropOnDay(e,day){
     if(!sched[toK])sched[toK]=[];
     if(sched[toK].indexOf(dragId)<0)sched[toK].push(dragId);
     moveOnSheet(dragFromKey,toK,dragId);
-  } else {
+  }else{
     if(!sched[toK])sched[toK]=[];
     if(sched[toK].indexOf(dragId)<0)sched[toK].push(dragId);
     assignOnSheet(toK,dragId);
@@ -384,7 +351,7 @@ function dropOnDay(e,day){
   render();if(selDay)renderDayPanel(selDay);
 }
 
-// ─── EDITOR ──────────────────────────────────────────────────
+// ── EDITOR ───────────────────────────────────────────────────
 function openEditor(id){
   var isNew=!id;
   var s=isNew?{id:"",name:"",cast:[],locations:[],timeOfDay:[],lighting:[],weather:[],props:[],extras:[],complexity:3,notes:""}:JSON.parse(JSON.stringify(getScene(id)));
@@ -400,9 +367,9 @@ function renderEditor(isNew){
   var labels={cast:"Cast",locations:"Location",timeOfDay:"Time of Day",lighting:"Lighting",weather:"Weather",props:"Props & Vehicles",extras:"Extras"};
   ["cast","locations","timeOfDay","lighting","weather","props","extras"].forEach(function(k){
     h+='<div class="field"><label>'+labels[k]+'</label><div class="tog-row">';
-    cats[k].forEach(function(o){
+    cats[k].forEach(function(o,idx){
       var on=(s[k]||[]).indexOf(o)>=0;
-      h+='<button class="tog'+(on?' on':'')+'" onclick="togEdit(\''+k+'\','+JSON.stringify(o)+')">'+esc(o)+'</button>';
+      h+='<button class="tog'+(on?' on':'')+'" onclick="togEdit(\''+k+'\','+idx+')">'+esc(o)+'</button>';
     });
     h+='</div></div>';
   });
@@ -413,12 +380,13 @@ function renderEditor(isNew){
   h+='</div></div>';
   h+='<div class="field"><label>Notes</label><textarea id="ed-notes" rows="3" onchange="window._ed.notes=this.value">'+esc(s.notes)+'</textarea></div>';
   h+='<div style="display:flex;justify-content:space-between;margin-top:8px"><div style="display:flex;gap:8px"><button class="mbtn gold" onclick="saveEdit()">Save</button><button class="mbtn ghost" onclick="closeModal()">Cancel</button></div>';
-  if(!isNew) h+='<button class="mbtn red" onclick="deleteEdit(\''+s.id+'\')">Delete</button>';
+  if(!isNew)h+='<button class="mbtn red" onclick="deleteEdit(\''+s.id+'\')">Delete</button>';
   h+='</div></div></div>';
   document.getElementById("modalMount").innerHTML=h;
 }
 
-function togEdit(key,val){
+function togEdit(key,idx){
+  var val=cats[key][idx];
   var s=window._ed;if(!s[key])s[key]=[];
   var i=s[key].indexOf(val);
   if(i>=0)s[key].splice(i,1);else s[key].push(val);
@@ -452,7 +420,7 @@ function deleteEdit(id){
 
 function closeModal(){document.getElementById("modalMount").innerHTML=""}
 
-// ─── SETTINGS ────────────────────────────────────────────────
+// ── SETTINGS ─────────────────────────────────────────────────
 var sTab="cast",sRen=null,sRenVal="";
 
 function openSettings(){sTab="cast";sRen=null;renderSettings()}
@@ -468,22 +436,22 @@ function renderSettings(){
   h+='<div style="display:flex;gap:8px;margin-bottom:14px"><input id="set-new" placeholder="Add new..." style="flex:1;padding:7px 10px;border-radius:5px;border:1px solid #3a342e;background:#141210;color:#e8e0d6;font-size:13px;outline:none" onkeydown="if(event.key===\'Enter\')addCat()"><button class="mbtn gold" style="padding:7px 14px" onclick="addCat()">Add</button></div>';
   cats[sTab].forEach(function(v,i){
     h+='<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:5px;margin-bottom:1px;background:'+(i%2?'rgba(26,23,20,.53)':'transparent')+'">';
-    if(sRen===v){
-      h+='<input id="set-ren" value="'+esc(sRenVal)+'" style="flex:1;padding:3px 7px;border-radius:4px;border:1px solid #c49b2a66;background:#141210;color:#e8e0d6;font-size:12px;outline:none" onkeydown="if(event.key===\'Enter\')renameCat(\''+esc(v)+'\')">';
-      h+='<button class="mbtn gold" style="padding:3px 8px;font-size:10px" onclick="renameCat(\''+esc(v)+'\')">Save</button>';
+    if(sRen===i){
+      h+='<input id="set-ren" value="'+esc(sRenVal)+'" style="flex:1;padding:3px 7px;border-radius:4px;border:1px solid #c49b2a66;background:#141210;color:#e8e0d6;font-size:12px;outline:none" onkeydown="if(event.key===\'Enter\')renameCat('+i+')">';
+      h+='<button class="mbtn gold" style="padding:3px 8px;font-size:10px" onclick="renameCat('+i+')">Save</button>';
       h+='<button class="mbtn ghost" style="padding:3px 6px;font-size:10px" onclick="sRen=null;renderSettings()">Esc</button>';
-    } else {
+    }else{
       h+='<span style="flex:1;font-size:12px;color:#e8e0d6">'+esc(v)+'</span>';
       h+='<span style="font-size:9px;color:#5a5248">'+scenes.filter(function(s){return Array.isArray(s[sTab])&&s[sTab].indexOf(v)>=0}).length+'&times;</span>';
-      h+='<button style="padding:2px 7px;border-radius:3px;border:1px solid #3a342e;background:none;color:#a09585;font-size:10px;cursor:pointer" onclick="sRen=\''+esc(v)+'\';sRenVal=\''+esc(v)+'\';renderSettings()">Rename</button>';
-      h+='<button style="padding:2px 7px;border-radius:3px;border:1px solid #c9404044;background:#c9404011;color:#c94040;font-size:10px;cursor:pointer" onclick="delCat(\''+esc(v)+'\')">Del</button>';
+      h+='<button style="padding:2px 7px;border-radius:3px;border:1px solid #3a342e;background:none;color:#a09585;font-size:10px;cursor:pointer" onclick="sRen='+i+';sRenVal=cats[sTab]['+i+'];renderSettings()">Rename</button>';
+      h+='<button style="padding:2px 7px;border-radius:3px;border:1px solid #c9404044;background:#c9404011;color:#c94040;font-size:10px;cursor:pointer" onclick="delCat('+i+')">Del</button>';
     }
     h+='</div>';
   });
   h+='<p style="font-size:10px;color:#5a5248;margin-top:12px">Renaming auto-updates all scenes. Click "Save Settings" to sync to Google Sheets.</p>';
   h+='</div></div></div></div>';
   document.getElementById("modalMount").innerHTML=h;
-  if(sRen){var el=document.getElementById("set-ren");if(el)el.focus()}
+  if(sRen!==null){var el=document.getElementById("set-ren");if(el)el.focus()}
 }
 
 function addCat(){
@@ -493,23 +461,23 @@ function addCat(){
   cats[sTab].push(v);el.value="";renderSettings();
 }
 
-function delCat(v){
-  cats[sTab]=cats[sTab].filter(function(x){return x!==v});
+function delCat(idx){
+  var old=cats[sTab][idx];
+  cats[sTab].splice(idx,1);
   renderSettings();
 }
 
-function renameCat(old){
+function renameCat(idx){
+  var old=cats[sTab][idx];
   var nw=document.getElementById("set-ren").value.trim();
   if(!nw||nw===old){sRen=null;renderSettings();return}
-  cats[sTab]=cats[sTab].map(function(x){return x===old?nw:x});
+  cats[sTab][idx]=nw;
   scenes.forEach(function(s){if(Array.isArray(s[sTab]))s[sTab]=s[sTab].map(function(x){return x===old?nw:x})});
   sRen=null;renderSettings();
 }
 
-// ─── ESCAPE HTML ─────────────────────────────────────────────
 function esc(s){if(!s)return"";var d=document.createElement("div");d.textContent=s;return d.innerHTML}
 
-// ─── START ───────────────────────────────────────────────────
 render();
 loadFromSheet();
 </script>
