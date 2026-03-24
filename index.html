@@ -100,10 +100,7 @@ button,input,textarea,select{font-family:inherit}
 <body>
 <div class="toast" id="toast"></div>
 <div class="header">
-  <div>
-    <h1>PROJECT HAIRPIN</h1>
-    <div class="sub">Production Scheduler</div>
-  </div>
+  <div><h1>PROJECT HAIRPIN</h1><div class="sub">Production Scheduler</div></div>
   <div style="display:flex;gap:6px">
     <button class="hbtn" onclick="openSettings()">⚙ Settings</button>
     <button class="hbtn gold" onclick="openEditor(null)">+ New Scene</button>
@@ -117,79 +114,108 @@ button,input,textarea,select{font-family:inherit}
 <div id="modalMount"></div>
 
 <script>
-const API_URL = "https://script.google.com/macros/s/AKfycby9FrPqkOGFPcIOwHuDwk88ctBbe98Y6Wbw_MczLsuDQbY2SW5OlWJt8AtHvuDRon5b/exec";
+var API_URL="https://script.google.com/macros/s/AKfycby9FrPqkOGFPcIOwHuDwk88ctBbe98Y6Wbw_MczLsuDQbY2SW5OlWJt8AtHvuDRon5b/exec";
 
-const DEFAULT_CATS = {
-  cast:["Tom","Kim","Rhodes","Cobb/Drummond","Peter","Commissioner","Lawyer/Hadley","Forensics Officer"],
-  locations:["Reese Air Force Base","Cook's Garage","Winery","Landfill","Police Station","McDougal Building","Kim's Apartment","Tom's Apartment","Donut Shop","Police Cruiser/Rural Road","Whataburger","Wind Farm/Dirt Field","Country Roads","The Void"],
-  timeOfDay:["Dawn/Sunrise","Morning","Day","Afternoon","Sunset/Dusk","Night"],
-  lighting:["Golden Hour","Blue Hour","Harsh Sun","Overcast OK","Controlled Interior","Moonlight/Night Ext","Practical Lights Only"],
-  weather:["Clear Required","Any Weather","Overcast Preferred","Wind Needed"],
-  props:["Tommy's Red Civic","Kim's Red Car","White Van","Peter's Truck","Police Cruiser","Pursuit Vehicles","Ambulances","The Machine","Kevlar Vest","Shotgun","Snub Revolver","Rifles","Neon Signs"],
-  extras:["Winery Guards (3-5)","Cook's Bar Patrons (12)","Storage Bay Goons (3)","Burly Guard (1)","Landfill Mercs (3-4)","Reese Mercs (7)","Uniformed Police (4-6)","Ambulance Crew (2)","Night Receptionist (1)"]
-};
+var DEFAULT_CATS={cast:["Tom","Kim","Rhodes","Cobb/Drummond","Peter","Commissioner","Lawyer/Hadley","Forensics Officer"],locations:["Reese Air Force Base","Cook's Garage","Winery","Landfill","Police Station","McDougal Building","Kim's Apartment","Tom's Apartment","Donut Shop","Police Cruiser/Rural Road","Whataburger","Wind Farm/Dirt Field","Country Roads","The Void"],timeOfDay:["Dawn/Sunrise","Morning","Day","Afternoon","Sunset/Dusk","Night"],lighting:["Golden Hour","Blue Hour","Harsh Sun","Overcast OK","Controlled Interior","Moonlight/Night Ext","Practical Lights Only"],weather:["Clear Required","Any Weather","Overcast Preferred","Wind Needed"],props:["Tommy's Red Civic","Kim's Red Car","White Van","Peter's Truck","Police Cruiser","Pursuit Vehicles","Ambulances","The Machine","Kevlar Vest","Shotgun","Snub Revolver","Rifles","Neon Signs"],extras:["Winery Guards (3-5)","Cook's Bar Patrons (12)","Storage Bay Goons (3)","Burly Guard (1)","Landfill Mercs (3-4)","Reese Mercs (7)","Uniformed Police (4-6)","Ambulance Crew (2)","Night Receptionist (1)"]};
 
-let cats = JSON.parse(JSON.stringify(DEFAULT_CATS));
-let scenes = [];
-let sched = {};
-let yr = 2026, mo = 4;
-let selDay = null;
-let dragId = null, dragFromKey = null;
+var cats=JSON.parse(JSON.stringify(DEFAULT_CATS));
+var scenes=[];
+var sched={};
+var yr=2026,mo=4,selDay=null,dragId=null,dragFromKey=null;
 
-const CC={1:"#4a9e6e",2:"#6b9e4a",3:"#c49b2a",4:"#d4772a",5:"#c94040"};
-const CL={1:"Simple",2:"Easy",3:"Medium",4:"Hard",5:"Major"};
-const MO=["January","February","March","April","May","June","July","August","September","October","November","December"];
-const DN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+var CC={1:"#4a9e6e",2:"#6b9e4a",3:"#c49b2a",4:"#d4772a",5:"#c94040"};
+var CL={1:"Simple",2:"Easy",3:"Medium",4:"Hard",5:"Major"};
+var MO=["January","February","March","April","May","June","July","August","September","October","November","December"];
+var DN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
 function daysIn(y,m){return new Date(y,m+1,0).getDate()}
 function firstDow(y,m){return new Date(y,m,1).getDay()}
-function dkk(y,m,d){return y+"-"+String(m+1).padStart(2,"0")+"-"+String(d).padStart(2,"0")}
-function dkey(d){return dkk(yr,mo,d)}
-function getScene(id){return scenes.find(function(s){return s.id===id})}
-function scheduledSet(){return new Set(Object.values(sched).flat())}
-
-// ── SAFE STRING ENCODE/DECODE for onclick ────────────────────
-// Instead of JSON.stringify in HTML attributes, use base64
-function enc(s){return btoa(unescape(encodeURIComponent(s)))}
-function dec(s){return decodeURIComponent(escape(atob(s)))}
+function pad2(n){return n<10?"0"+n:""+n}
+function mkdk(y,m,d){return y+"-"+pad2(m+1)+"-"+pad2(d)}
+function dkey(d){return mkdk(yr,mo,d)}
+function getScene(id){for(var i=0;i<scenes.length;i++){if(scenes[i].id===id)return scenes[i]}return null}
+function scheduledSet(){var s=new Set();var keys=Object.keys(sched);for(var i=0;i<keys.length;i++){var arr=sched[keys[i]];for(var j=0;j<arr.length;j++)s.add(arr[j])}return s}
 
 // ── JSONP ────────────────────────────────────────────────────
 function api(params){
   return new Promise(function(resolve){
     var cb="jcb_"+Date.now()+"_"+Math.floor(Math.random()*10000);
-    var t=setTimeout(function(){delete window[cb];if(sc.parentNode)sc.parentNode.removeChild(sc);resolve({error:"Request timed out"})},20000);
-    window[cb]=function(data){clearTimeout(t);delete window[cb];if(sc.parentNode)sc.parentNode.removeChild(sc);resolve(data)};
     var sc=document.createElement("script");
+    var done=false;
+    var t=setTimeout(function(){if(done)return;done=true;delete window[cb];if(sc.parentNode)sc.parentNode.removeChild(sc);resolve({error:"Timeout"})},25000);
+    window[cb]=function(data){if(done)return;done=true;clearTimeout(t);delete window[cb];if(sc.parentNode)sc.parentNode.removeChild(sc);resolve(data)};
+    sc.onerror=function(){if(done)return;done=true;clearTimeout(t);delete window[cb];if(sc.parentNode)sc.parentNode.removeChild(sc);resolve({error:"Network error"})};
     sc.src=API_URL+"?"+params+"&callback="+cb;
-    sc.onerror=function(){clearTimeout(t);delete window[cb];if(sc.parentNode)sc.parentNode.removeChild(sc);resolve({error:"Network error"})};
     document.body.appendChild(sc);
   });
 }
-function apiWrite(payload){return api("payload="+encodeURIComponent(JSON.stringify(payload)))}
+function apiWrite(p){return api("payload="+encodeURIComponent(JSON.stringify(p)))}
 
-function toast(msg,type){
-  var t=document.getElementById("toast");
-  t.textContent=msg;t.className="toast "+type+" show";
-  setTimeout(function(){t.className="toast"},3000);
-}
+function toast(msg,type){var t=document.getElementById("toast");t.textContent=msg;t.className="toast "+type+" show";setTimeout(function(){t.className="toast"},3000)}
 
 // ── LOAD ─────────────────────────────────────────────────────
 async function loadFromSheet(){
   var data=await api("action=getAll");
   if(data.error){toast("Load failed: "+data.error,"err");render();return}
+
+  // Load scenes
   if(data.scenes&&data.scenes.length>0)scenes=data.scenes;
-  if(data.schedule)sched=data.schedule;
-  if(data.cats){Object.keys(data.cats).forEach(function(k){if(data.cats[k].length>0)cats[k]=data.cats[k]})}
+
+  // Load schedule — normalize keys (trim whitespace, ensure strings)
+  sched={};
+  if(data.schedule){
+    var keys=Object.keys(data.schedule);
+    for(var i=0;i<keys.length;i++){
+      var k=String(keys[i]).trim();
+      var ids=data.schedule[keys[i]];
+      if(!ids||!ids.length)continue;
+      // Clean up IDs — trim each one
+      var clean=[];
+      for(var j=0;j<ids.length;j++){
+        var id=String(ids[j]).trim();
+        if(id)clean.push(id);
+      }
+      if(clean.length>0)sched[k]=clean;
+    }
+  }
+
+  // Load categories
+  if(data.cats){
+    var ck=Object.keys(data.cats);
+    for(var i=0;i<ck.length;i++){
+      if(data.cats[ck[i]].length>0)cats[ck[i]]=data.cats[ck[i]];
+    }
+  }
+
+  console.log("Loaded schedule:",JSON.stringify(sched));
+  console.log("Loaded scenes:",scenes.length);
   toast("Loaded from Google Sheets","ok");
   render();
 }
 
-// ── INDIVIDUAL SAVES ─────────────────────────────────────────
-async function saveSceneToSheet(scene){var r=await apiWrite({action:"saveScene",scene:scene});if(r.error)toast("Save failed: "+r.error,"err")}
-async function deleteSceneFromSheet(id){var r=await apiWrite({action:"deleteScene",id:id});if(r.error)toast("Delete failed: "+r.error,"err")}
-async function assignOnSheet(dateKey,sceneId){var r=await apiWrite({action:"assignScene",dateKey:dateKey,sceneId:sceneId});if(r.error)toast("Assign failed: "+r.error,"err")}
-async function unassignOnSheet(dateKey,sceneId){var r=await apiWrite({action:"unassignScene",dateKey:dateKey,sceneId:sceneId});if(r.error)toast("Unassign failed: "+r.error,"err")}
-async function moveOnSheet(fromKey,toKey,sceneId){var r=await apiWrite({action:"moveScene",fromKey:fromKey,toKey:toKey,sceneId:sceneId});if(r.error)toast("Move failed: "+r.error,"err")}
-async function saveCatsToSheet(){var r=await apiWrite({action:"saveCategories",cats:cats});if(r.error)toast("Settings save failed: "+r.error,"err");else toast("Settings saved","ok")}
+// ── SAVES (individual) ───────────────────────────────────────
+async function saveSceneToSheet(scene){
+  var r=await apiWrite({action:"saveScene",scene:scene});
+  if(r.error)toast("Save failed: "+r.error,"err");
+}
+async function deleteSceneFromSheet(id){
+  var r=await apiWrite({action:"deleteScene",id:id});
+  if(r.error)toast("Delete failed: "+r.error,"err");
+}
+
+// For schedule changes, we now send the FULL schedule row for that date
+// This avoids append-vs-update confusion on the sheet side
+async function saveScheduleRow(dateKey){
+  var ids=sched[dateKey]||[];
+  var r=await apiWrite({action:"saveScheduleRow",dateKey:dateKey,sceneIds:ids});
+  if(r.error)toast("Schedule save failed: "+r.error,"err");
+}
+
+async function saveCatsToSheet(){
+  var r=await apiWrite({action:"saveCategories",cats:cats});
+  if(r.error)toast("Settings save failed: "+r.error,"err");
+  else toast("Settings saved","ok");
+}
 
 // ── RENDER ───────────────────────────────────────────────────
 function render(){renderLeft();renderCal();if(selDay)renderDayPanel(selDay)}
@@ -197,18 +223,21 @@ function render(){renderLeft();renderCal();if(selDay)renderDayPanel(selDay)}
 function renderLeft(){
   var el=document.getElementById("leftPanel");
   var sset=scheduledSet();
-  var unsched=scenes.filter(function(s){return!sset.has(s.id)}).sort(function(a,b){return b.complexity-a.complexity||b.cast.length-a.cast.length});
+  var unsched=[];
+  for(var i=0;i<scenes.length;i++){if(!sset.has(scenes[i].id))unsched.push(scenes[i])}
+  unsched.sort(function(a,b){return b.complexity-a.complexity||b.cast.length-a.cast.length});
   var h='<div class="left-title">Unscheduled ('+unsched.length+')</div>';
-  unsched.forEach(function(s){
+  for(var i=0;i<unsched.length;i++){
+    var s=unsched[i];
     h+='<div class="chip" draggable="true" ondragstart="startDrag(\''+s.id+'\',null)" onclick="openEditor(\''+s.id+'\')" style="background:linear-gradient(135deg,'+CC[s.complexity]+'22,'+CC[s.complexity]+'11);border:1.5px solid '+CC[s.complexity]+'55;border-left:4px solid '+CC[s.complexity]+'">';
     h+='<div class="name">'+esc(s.name)+'</div><div class="tags">';
-    s.cast.forEach(function(c){h+='<span>'+esc(c)+'</span>'});
-    s.timeOfDay.forEach(function(t){h+='<span class="tod">'+esc(t)+'</span>'});
+    for(var j=0;j<s.cast.length;j++)h+='<span>'+esc(s.cast[j])+'</span>';
+    for(var j=0;j<s.timeOfDay.length;j++)h+='<span class="tod">'+esc(s.timeOfDay[j])+'</span>';
     h+='</div></div>';
-  });
+  }
   if(!unsched.length)h+='<div style="font-size:11px;color:#5a5248;text-align:center;padding:16px">No scenes yet — click + New Scene</div>';
   h+='<div class="legend"><div class="lg-title">Complexity</div>';
-  [1,2,3,4,5].forEach(function(n){h+='<div class="lg-item"><div class="lg-dot" style="background:'+CC[n]+'"></div><div class="lg-label">'+CL[n]+'</div></div>'});
+  for(var n=1;n<=5;n++)h+='<div class="lg-item"><div class="lg-dot" style="background:'+CC[n]+'"></div><div class="lg-label">'+CL[n]+'</div></div>';
   h+='</div>';
   el.innerHTML=h;
 }
@@ -217,31 +246,35 @@ function renderCal(){
   var el=document.getElementById("calWrap");
   var dim=daysIn(yr,mo),fd=firstDow(yr,mo);
   var sset=scheduledSet();
-  var unsched=scenes.filter(function(s){return!sset.has(s.id)});
+  var unschedCount=0;
+  for(var i=0;i<scenes.length;i++){if(!sset.has(scenes[i].id))unschedCount++}
   var h='<div class="cal-nav"><button onclick="prevMo()">&#8249;</button><h2>'+MO[mo]+' '+yr+'</h2><button onclick="nextMo()">&#8250;</button></div>';
   h+='<div class="cal-grid">';
-  DN.forEach(function(d){h+='<div class="cal-head">'+d+'</div>'});
+  for(var i=0;i<7;i++)h+='<div class="cal-head">'+DN[i]+'</div>';
   for(var i=0;i<fd;i++)h+='<div></div>';
-  for(var i=1;i<=dim;i++){
-    var k=dkey(i);
-    var ds=(sched[k]||[]).map(getScene).filter(Boolean);
-    var sel=selDay===i,we=(fd+i-1)%7===0||(fd+i-1)%7===6;
-    var tc=ds.reduce(function(a,s){return a+s.complexity},0);
-    h+='<div class="cal-day'+(sel?' sel':'')+(we?' we':'')+'" onclick="selectDay('+i+')" ondragover="event.preventDefault()" ondrop="dropOnDay(event,'+i+')">';
-    h+='<div class="dnum"><span>'+i+'</span>';
+  for(var d=1;d<=dim;d++){
+    var k=dkey(d);
+    var ids=sched[k]||[];
+    var ds=[];
+    for(var j=0;j<ids.length;j++){var sc=getScene(ids[j]);if(sc)ds.push(sc)}
+    var sel=selDay===d,we=(fd+d-1)%7===0||(fd+d-1)%7===6;
+    var tc=0;for(var j=0;j<ds.length;j++)tc+=ds[j].complexity;
+    h+='<div class="cal-day'+(sel?' sel':'')+(we?' we':'')+'" onclick="selectDay('+d+')" ondragover="event.preventDefault()" ondrop="dropOnDay(event,'+d+')">';
+    h+='<div class="dnum"><span>'+d+'</span>';
     if(ds.length)h+='<span class="badge" style="background:'+(tc>8?'#c9404033':'#c49b2a22')+';color:'+(tc>8?'#e8a0a0':'#c49b2a')+'">'+ds.length+'s</span>';
     h+='</div>';
-    ds.slice(0,3).forEach(function(s){
+    var show=Math.min(ds.length,3);
+    for(var j=0;j<show;j++){
+      var s=ds[j];
       h+='<div class="mini-chip" draggable="true" ondragstart="event.stopPropagation();startDrag(\''+s.id+'\',\''+k+'\')" style="background:'+CC[s.complexity]+'22;border-left:2px solid '+CC[s.complexity]+'">'+esc(s.name)+'</div>';
-    });
+    }
     if(ds.length>3)h+='<div style="font-size:8px;color:#6a5e52;text-align:center">+'+(ds.length-3)+'</div>';
     h+='</div>';
   }
   h+='</div><div class="stats">';
-  var sd=Object.values(sched).filter(function(v){return v.length>0}).length;
-  [{v:sd,l:"Shoot Days",c:"#e8d5a0"},{v:sset.size,l:"Scheduled",c:"#e8d5a0"},{v:unsched.length,l:"Remaining",c:unsched.length?"#c49b2a":"#4a9e6e"},{v:scenes.length,l:"Total",c:"#e8d5a0"}].forEach(function(o){
-    h+='<div class="s"><div class="n" style="color:'+o.c+'">'+o.v+'</div><div class="l">'+o.l+'</div></div>';
-  });
+  var sd=0;var keys=Object.keys(sched);for(var i=0;i<keys.length;i++){if(sched[keys[i]].length>0)sd++}
+  var arr=[{v:sd,l:"Shoot Days",c:"#e8d5a0"},{v:sset.size,l:"Scheduled",c:"#e8d5a0"},{v:unschedCount,l:"Remaining",c:unschedCount?"#c49b2a":"#4a9e6e"},{v:scenes.length,l:"Total",c:"#e8d5a0"}];
+  for(var i=0;i<arr.length;i++){h+='<div class="s"><div class="n" style="color:'+arr[i].c+'">'+arr[i].v+'</div><div class="l">'+arr[i].l+'</div></div>'}
   h+='</div>';
   el.innerHTML=h;
 }
@@ -251,28 +284,41 @@ var dpAvail={cast:[],locations:[],timeOfDay:[],props:[],weather:[]};
 
 function renderDayPanel(day){
   var k=dkey(day);
-  var assigned=(sched[k]||[]).map(getScene).filter(Boolean);
+  var ids=sched[k]||[];
+  var assigned=[];for(var i=0;i<ids.length;i++){var sc=getScene(ids[i]);if(sc)assigned.push(sc)}
   var sset=scheduledSet();
-  var unsched=scenes.filter(function(s){return!sset.has(s.id)});
-  var tc=assigned.reduce(function(a,s){return a+s.complexity},0);
+  var unsched=[];for(var i=0;i<scenes.length;i++){if(!sset.has(scenes[i].id))unsched.push(scenes[i])}
+  var tc=0;for(var i=0;i<assigned.length;i++)tc+=assigned[i].complexity;
   var hasF=dpAvail.cast.length||dpAvail.locations.length||dpAvail.timeOfDay.length||dpAvail.props.length||dpAvail.weather.length;
-  var matches=!hasF?[]:unsched.filter(function(s){
-    if(dpAvail.cast.length&&!s.cast.every(function(c){return dpAvail.cast.indexOf(c)>=0}))return false;
-    if(dpAvail.locations.length&&!s.locations.some(function(l){return dpAvail.locations.indexOf(l)>=0}))return false;
-    if(dpAvail.timeOfDay.length&&!s.timeOfDay.some(function(t){return dpAvail.timeOfDay.indexOf(t)>=0}))return false;
-    if(dpAvail.props.length&&!s.props.every(function(p){return dpAvail.props.indexOf(p)>=0}))return false;
-    if(dpAvail.weather.length&&!s.weather.some(function(w){return dpAvail.weather.indexOf(w)>=0||w==="Any Weather"}))return false;
-    return true;
-  }).sort(function(a,b){return b.complexity-a.complexity});
+
+  var matches=[];
+  if(hasF){
+    for(var i=0;i<unsched.length;i++){
+      var s=unsched[i],ok=true;
+      if(dpAvail.cast.length){for(var j=0;j<s.cast.length;j++){if(dpAvail.cast.indexOf(s.cast[j])<0){ok=false;break}}}
+      if(ok&&dpAvail.locations.length){var found=false;for(var j=0;j<s.locations.length;j++){if(dpAvail.locations.indexOf(s.locations[j])>=0){found=true;break}}if(!found)ok=false}
+      if(ok&&dpAvail.timeOfDay.length){var found=false;for(var j=0;j<s.timeOfDay.length;j++){if(dpAvail.timeOfDay.indexOf(s.timeOfDay[j])>=0){found=true;break}}if(!found)ok=false}
+      if(ok&&dpAvail.props.length){for(var j=0;j<s.props.length;j++){if(dpAvail.props.indexOf(s.props[j])<0){ok=false;break}}}
+      if(ok&&dpAvail.weather.length){var found=false;for(var j=0;j<s.weather.length;j++){if(dpAvail.weather.indexOf(s.weather[j])>=0||s.weather[j]==="Any Weather"){found=true;break}}if(!found)ok=false}
+      if(ok)matches.push(s);
+    }
+    matches.sort(function(a,b){return b.complexity-a.complexity});
+  }
 
   var h='<div class="daypanel"><div class="dp-head"><h2>'+MO[mo]+' '+day+', '+yr+'</h2><button class="hbtn" onclick="closeDay()">&#10005;</button></div><div class="dp-body">';
   if(assigned.length){
     h+='<div class="dp-section">Shooting This Day ('+assigned.length+' &middot; complexity '+tc+')</div>';
-    assigned.forEach(function(s){
+    for(var i=0;i<assigned.length;i++){
+      var s=assigned[i];
       h+='<div class="asgn-row"><div class="ar-info" onclick="openEditor(\''+s.id+'\')" style="background:'+CC[s.complexity]+'15;border:1px solid '+CC[s.complexity]+'44;border-left:3px solid '+CC[s.complexity]+'">'+esc(s.name)+'</div><button class="ar-rem" onclick="remFromDay(\''+s.id+'\',\''+k+'\')">Remove</button></div>';
-    });
+    }
     var allC=[],allL=[],allP=[],allE=[];
-    assigned.forEach(function(s){s.cast.forEach(function(c){if(allC.indexOf(c)<0)allC.push(c)});s.locations.forEach(function(l){if(allL.indexOf(l)<0)allL.push(l)});s.props.forEach(function(p){if(allP.indexOf(p)<0)allP.push(p)});s.extras.forEach(function(e){if(allE.indexOf(e)<0)allE.push(e)})});
+    for(var i=0;i<assigned.length;i++){var s=assigned[i];
+      for(var j=0;j<s.cast.length;j++){if(allC.indexOf(s.cast[j])<0)allC.push(s.cast[j])}
+      for(var j=0;j<s.locations.length;j++){if(allL.indexOf(s.locations[j])<0)allL.push(s.locations[j])}
+      for(var j=0;j<s.props.length;j++){if(allP.indexOf(s.props[j])<0)allP.push(s.props[j])}
+      for(var j=0;j<s.extras.length;j++){if(allE.indexOf(s.extras[j])<0)allE.push(s.extras[j])}
+    }
     h+='<div class="dp-callsheet"><strong>Cast:</strong> '+allC.join(", ")+'<br><strong>Locations:</strong> '+allL.join(", ")+'<br><strong>Props:</strong> '+(allP.join(", ")||"—")+'<br><strong>Extras:</strong> '+(allE.join(", ")||"—")+'</div><div style="height:16px"></div>';
   }
   h+='<div class="res-box"><div class="rb-title">What do you have this day?</div><div class="rb-hint">Toggle available resources — matching scenes appear below</div>';
@@ -285,9 +331,9 @@ function renderDayPanel(day){
   if(hasF){
     h+='<div class="dp-section">Scenes That Fit ('+matches.length+')</div>';
     if(!matches.length)h+='<div style="font-size:11px;color:#5a5248;text-align:center;padding:12px">No unscheduled scenes match</div>';
-    matches.forEach(function(s){
+    for(var i=0;i<matches.length;i++){var s=matches[i];
       h+='<div class="match-item"><div class="mi-info" onclick="openEditor(\''+s.id+'\')" style="background:'+CC[s.complexity]+'15;border:1px solid '+CC[s.complexity]+'44;border-left:3px solid '+CC[s.complexity]+'"><div class="mi-name">'+esc(s.name)+'</div><div class="mi-meta">'+s.cast.join(", ")+' &middot; '+s.locations.join(", ")+'</div></div><button class="mi-add" onclick="addToDay(\''+s.id+'\','+day+')">+ Add</button></div>';
-    });
+    }
   }else{
     h+='<div style="font-size:11px;color:#5a5248;text-align:center;padding:16px">Select resources above to find matching scenes</div>';
   }
@@ -297,10 +343,10 @@ function renderDayPanel(day){
 
 function togCat(key,label,current,color){
   var h='<div class="res-cat"><div class="rc-label">'+label+'</div><div class="tog-row">';
-  cats[key].forEach(function(o,idx){
-    var on=current.indexOf(o)>=0;
-    h+='<button class="tog'+(on?' on':'')+'" style="--tc:'+color+'" onclick="toggleAvail(\''+key+'\','+idx+')">'+esc(o)+'</button>';
-  });
+  for(var i=0;i<cats[key].length;i++){
+    var o=cats[key][i],on=current.indexOf(o)>=0;
+    h+='<button class="tog'+(on?' on':'')+'" style="--tc:'+color+'" onclick="toggleAvail(\''+key+'\','+i+')">'+esc(o)+'</button>';
+  }
   return h+'</div></div>';
 }
 
@@ -322,33 +368,42 @@ function addToDay(sid,day){
   if(!sched[k])sched[k]=[];
   if(sched[k].indexOf(sid)<0)sched[k].push(sid);
   render();if(selDay)renderDayPanel(selDay);
-  assignOnSheet(k,sid);
+  saveScheduleRow(k);
 }
 
 function remFromDay(sid,k){
-  if(sched[k])sched[k]=sched[k].filter(function(i){return i!==sid});
-  if(sched[k]&&!sched[k].length)delete sched[k];
+  if(!sched[k])return;
+  var arr=[];for(var i=0;i<sched[k].length;i++){if(sched[k][i]!==sid)arr.push(sched[k][i])}
+  if(arr.length>0)sched[k]=arr;else delete sched[k];
   render();if(selDay)renderDayPanel(selDay);
-  unassignOnSheet(k,sid);
+  saveScheduleRow(k);
 }
 
 function startDrag(id,fromKey){dragId=id;dragFromKey=fromKey}
+
 function dropOnDay(e,day){
-  e.preventDefault();if(!dragId)return;
+  e.preventDefault();
+  if(!dragId)return;
   var toK=dkey(day);
-  if(dragFromKey){
-    sched[dragFromKey]=(sched[dragFromKey]||[]).filter(function(i){return i!==dragId});
-    if(!sched[dragFromKey].length)delete sched[dragFromKey];
-    if(!sched[toK])sched[toK]=[];
-    if(sched[toK].indexOf(dragId)<0)sched[toK].push(dragId);
-    moveOnSheet(dragFromKey,toK,dragId);
-  }else{
-    if(!sched[toK])sched[toK]=[];
-    if(sched[toK].indexOf(dragId)<0)sched[toK].push(dragId);
-    assignOnSheet(toK,dragId);
-  }
+  var sid=dragId;
+  var fromK=dragFromKey;
   dragId=null;dragFromKey=null;
+
+  // Remove from old date locally
+  if(fromK&&sched[fromK]){
+    var arr=[];for(var i=0;i<sched[fromK].length;i++){if(sched[fromK][i]!==sid)arr.push(sched[fromK][i])}
+    if(arr.length>0)sched[fromK]=arr;else delete sched[fromK];
+  }
+
+  // Add to new date locally
+  if(!sched[toK])sched[toK]=[];
+  if(sched[toK].indexOf(sid)<0)sched[toK].push(sid);
+
   render();if(selDay)renderDayPanel(selDay);
+
+  // Save both rows to sheet
+  if(fromK&&fromK!==toK)saveScheduleRow(fromK);
+  saveScheduleRow(toK);
 }
 
 // ── EDITOR ───────────────────────────────────────────────────
@@ -365,18 +420,20 @@ function renderEditor(isNew){
   h+='<h2>'+(isNew?'New Scene':'Edit Scene')+'</h2>';
   h+='<div class="field"><label>Scene Name</label><input id="ed-name" value="'+esc(s.name)+'" onchange="window._ed.name=this.value"></div>';
   var labels={cast:"Cast",locations:"Location",timeOfDay:"Time of Day",lighting:"Lighting",weather:"Weather",props:"Props & Vehicles",extras:"Extras"};
-  ["cast","locations","timeOfDay","lighting","weather","props","extras"].forEach(function(k){
+  var catKeys=["cast","locations","timeOfDay","lighting","weather","props","extras"];
+  for(var ki=0;ki<catKeys.length;ki++){
+    var k=catKeys[ki];
     h+='<div class="field"><label>'+labels[k]+'</label><div class="tog-row">';
-    cats[k].forEach(function(o,idx){
-      var on=(s[k]||[]).indexOf(o)>=0;
-      h+='<button class="tog'+(on?' on':'')+'" onclick="togEdit(\''+k+'\','+idx+')">'+esc(o)+'</button>';
-    });
+    for(var i=0;i<cats[k].length;i++){
+      var o=cats[k][i],on=(s[k]||[]).indexOf(o)>=0;
+      h+='<button class="tog'+(on?' on':'')+'" onclick="togEdit(\''+k+'\','+i+')">'+esc(o)+'</button>';
+    }
     h+='</div></div>';
-  });
+  }
   h+='<div class="field"><label>Complexity</label><div class="cx-row">';
-  [1,2,3,4,5].forEach(function(n){
+  for(var n=1;n<=5;n++){
     h+='<button class="cx-btn" onclick="setCx('+n+')" style="border:'+(s.complexity===n?'2px solid '+CC[n]:'1px solid #3a342e')+';background:'+(s.complexity===n?CC[n]+'33':'#1a1714')+';color:'+(s.complexity===n?CC[n]:'#8a7e72')+'">'+CL[n]+'</button>';
-  });
+  }
   h+='</div></div>';
   h+='<div class="field"><label>Notes</label><textarea id="ed-notes" rows="3" onchange="window._ed.notes=this.value">'+esc(s.notes)+'</textarea></div>';
   h+='<div style="display:flex;justify-content:space-between;margin-top:8px"><div style="display:flex;gap:8px"><button class="mbtn gold" onclick="saveEdit()">Save</button><button class="mbtn ghost" onclick="closeModal()">Cancel</button></div>';
@@ -411,8 +468,13 @@ function saveEdit(){
 
 function deleteEdit(id){
   if(!confirm("Delete this scene?"))return;
-  scenes=scenes.filter(function(s){return s.id!==id});
-  Object.keys(sched).forEach(function(k){sched[k]=sched[k].filter(function(i){return i!==id});if(!sched[k].length)delete sched[k]});
+  var newScenes=[];for(var i=0;i<scenes.length;i++){if(scenes[i].id!==id)newScenes.push(scenes[i])}
+  scenes=newScenes;
+  var keys=Object.keys(sched);
+  for(var i=0;i<keys.length;i++){
+    var arr=[];for(var j=0;j<sched[keys[i]].length;j++){if(sched[keys[i]][j]!==id)arr.push(sched[keys[i]][j])}
+    if(arr.length>0)sched[keys[i]]=arr;else delete sched[keys[i]];
+  }
   closeModal();render();if(selDay)renderDayPanel(selDay);
   deleteSceneFromSheet(id);
   toast("Scene deleted","ok");
@@ -429,50 +491,41 @@ function renderSettings(){
   var tabs=[{k:"cast",l:"Cast"},{k:"locations",l:"Locations"},{k:"timeOfDay",l:"Time of Day"},{k:"lighting",l:"Lighting"},{k:"weather",l:"Weather"},{k:"props",l:"Props"},{k:"extras",l:"Extras"}];
   var h='<div class="modal-bg" onclick="closeModal()"><div class="modal" style="padding:0;max-width:680px" onclick="event.stopPropagation()"><div class="settings-wrap">';
   h+='<div class="settings-nav"><div class="sn-title">Settings</div>';
-  tabs.forEach(function(t){h+='<div class="sn-item'+(sTab===t.k?' active':'')+'" onclick="sTab=\''+t.k+'\';sRen=null;renderSettings()">'+t.l+' ('+cats[t.k].length+')</div>'});
+  for(var i=0;i<tabs.length;i++){var t=tabs[i];h+='<div class="sn-item'+(sTab===t.k?' active':'')+'" onclick="sTab=\''+t.k+'\';sRen=null;renderSettings()">'+t.l+' ('+cats[t.k].length+')</div>'}
   h+='<div style="border-top:1px solid #3a342e;margin:12px 0"></div><div class="sn-item" style="color:#4a9e6e;font-weight:600" onclick="saveCatsToSheet()">Save Settings</div>';
   h+='<div class="sn-item" style="color:#c94040" onclick="closeModal()">Close</div></div>';
   h+='<div class="settings-body">';
   h+='<div style="display:flex;gap:8px;margin-bottom:14px"><input id="set-new" placeholder="Add new..." style="flex:1;padding:7px 10px;border-radius:5px;border:1px solid #3a342e;background:#141210;color:#e8e0d6;font-size:13px;outline:none" onkeydown="if(event.key===\'Enter\')addCat()"><button class="mbtn gold" style="padding:7px 14px" onclick="addCat()">Add</button></div>';
-  cats[sTab].forEach(function(v,i){
+  for(var i=0;i<cats[sTab].length;i++){
+    var v=cats[sTab][i];
     h+='<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:5px;margin-bottom:1px;background:'+(i%2?'rgba(26,23,20,.53)':'transparent')+'">';
     if(sRen===i){
       h+='<input id="set-ren" value="'+esc(sRenVal)+'" style="flex:1;padding:3px 7px;border-radius:4px;border:1px solid #c49b2a66;background:#141210;color:#e8e0d6;font-size:12px;outline:none" onkeydown="if(event.key===\'Enter\')renameCat('+i+')">';
       h+='<button class="mbtn gold" style="padding:3px 8px;font-size:10px" onclick="renameCat('+i+')">Save</button>';
       h+='<button class="mbtn ghost" style="padding:3px 6px;font-size:10px" onclick="sRen=null;renderSettings()">Esc</button>';
     }else{
+      var cnt=0;for(var j=0;j<scenes.length;j++){if(scenes[j][sTab]&&scenes[j][sTab].indexOf(v)>=0)cnt++}
       h+='<span style="flex:1;font-size:12px;color:#e8e0d6">'+esc(v)+'</span>';
-      h+='<span style="font-size:9px;color:#5a5248">'+scenes.filter(function(s){return Array.isArray(s[sTab])&&s[sTab].indexOf(v)>=0}).length+'&times;</span>';
+      h+='<span style="font-size:9px;color:#5a5248">'+cnt+'&times;</span>';
       h+='<button style="padding:2px 7px;border-radius:3px;border:1px solid #3a342e;background:none;color:#a09585;font-size:10px;cursor:pointer" onclick="sRen='+i+';sRenVal=cats[sTab]['+i+'];renderSettings()">Rename</button>';
       h+='<button style="padding:2px 7px;border-radius:3px;border:1px solid #c9404044;background:#c9404011;color:#c94040;font-size:10px;cursor:pointer" onclick="delCat('+i+')">Del</button>';
     }
     h+='</div>';
-  });
-  h+='<p style="font-size:10px;color:#5a5248;margin-top:12px">Renaming auto-updates all scenes. Click "Save Settings" to sync to Google Sheets.</p>';
+  }
+  h+='<p style="font-size:10px;color:#5a5248;margin-top:12px">Renaming auto-updates all scenes. Click "Save Settings" to sync.</p>';
   h+='</div></div></div></div>';
   document.getElementById("modalMount").innerHTML=h;
   if(sRen!==null){var el=document.getElementById("set-ren");if(el)el.focus()}
 }
 
-function addCat(){
-  var el=document.getElementById("set-new");
-  var v=el.value.trim();
-  if(!v||cats[sTab].indexOf(v)>=0)return;
-  cats[sTab].push(v);el.value="";renderSettings();
-}
-
-function delCat(idx){
-  var old=cats[sTab][idx];
-  cats[sTab].splice(idx,1);
-  renderSettings();
-}
-
+function addCat(){var el=document.getElementById("set-new");var v=el.value.trim();if(!v||cats[sTab].indexOf(v)>=0)return;cats[sTab].push(v);el.value="";renderSettings()}
+function delCat(idx){cats[sTab].splice(idx,1);renderSettings()}
 function renameCat(idx){
   var old=cats[sTab][idx];
   var nw=document.getElementById("set-ren").value.trim();
   if(!nw||nw===old){sRen=null;renderSettings();return}
   cats[sTab][idx]=nw;
-  scenes.forEach(function(s){if(Array.isArray(s[sTab]))s[sTab]=s[sTab].map(function(x){return x===old?nw:x})});
+  for(var i=0;i<scenes.length;i++){var s=scenes[i];if(s[sTab]){for(var j=0;j<s[sTab].length;j++){if(s[sTab][j]===old)s[sTab][j]=nw}}}
   sRen=null;renderSettings();
 }
 
