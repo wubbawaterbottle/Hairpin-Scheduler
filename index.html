@@ -865,7 +865,7 @@ function renderJobDetail(jobId) {
   // Job payments
   var jobPayments = getJobPayments(jobId);
   var payTotal = 0; jobPayments.forEach(function(p) { payTotal += parseFloat(p.NetAmount) || 0; });
-  var remaining = (parseFloat(job.GrossTotal) || 0) - payTotal;
+  var remaining = Math.max(0, (parseFloat(job.GrossTotal) || 0) - payTotal);
   var isResolved = job.PaymentResolved || false;
   var resolvedReason = job.ResolvedReason || "";
 
@@ -949,7 +949,7 @@ function renderPayments() {
 
   var totalBilled = 0;
   S.jobs.forEach(function(j) { totalBilled += parseFloat(j.GrossTotal) || 0; });
-  var totalOutstanding = totalBilled - totalReceived;
+  var totalOutstanding = Math.max(0, totalBilled - totalReceived);
 
   // Jobs with outstanding balances
   var outstandingJobs = S.jobs.filter(function(j) {
@@ -957,7 +957,7 @@ function renderPayments() {
     if (gross === 0) return false;
     if (j.PaymentResolved) return false;
     var received = getJobTotalReceived(j.ID);
-    return received < gross;
+    return received < gross && !j.PaymentResolved;
   });
 
   var resolvedJobs = S.jobs.filter(function(j) {
@@ -1004,7 +1004,7 @@ function renderPayments() {
     outstandingJobs.forEach(function(j) {
       var gross = parseFloat(j.GrossTotal) || 0;
       var received = getJobTotalReceived(j.ID);
-      var rem = gross - received;
+      var rem = Math.max(0, gross - received);
       html += '<tr class="clickable" onclick="openJobDetail(\'' + j.ID + '\')">'
         + '<td><strong>' + (j.JobName || j.ClientName || "—") + '</strong>'
         + (j.ClientName && j.JobName ? '<br><span style="color:var(--fg3);font-size:11px;">' + j.ClientName + '</span>' : '') + '</td>'
@@ -1594,7 +1594,7 @@ function openJobEditor(jobId) {
     + '<input class="form-input" id="jClientLocation" value="' + (job.ClientLocation || "") + '"></div>';
 
   html += '<div class="form-group"><label class="form-label">Tax status</label>'
-    + '<select class="form-select" id="jTaxStatus">';
+    + '<select class="form-select" id="jTaxStatus" onchange="taxStatusChanged()">';
   taxStatuses.forEach(function(ts) { html += '<option' + (job.TaxStatus === ts ? ' selected' : '') + '>' + ts + '</option>'; });
   html += '</select></div></div>';
 
@@ -1605,8 +1605,23 @@ function openJobEditor(jobId) {
     + '<div class="form-group"><label class="form-label">Tax amount</label>'
     + '<input class="form-input" type="number" step="0.01" id="jTaxAmount" value="' + (job.TaxAmount || "") + '"></div></div>';
 
-  html += '<div class="form-row"><div class="form-group"><label class="form-label">Gross total</label>'
-    + '<input class="form-input" type="number" step="0.01" id="jGrossTotal" value="' + (job.GrossTotal || "") + '"></div>'
+  // Billable expenses (added after tax)
+  var pData = {};
+  try { pData = typeof job.PipelineData === "object" ? job.PipelineData : JSON.parse(job.PipelineData || "{}"); } catch(e) {}
+  var billableItems = pData.billableItems || [];
+
+  html += '<div class="form-group"><label class="form-label">Billable expenses <span style="font-weight:400;color:var(--fg3);text-transform:none;">(added after tax — flows into invoice)</span></label>'
+    + '<div id="jBillableItems">';
+  billableItems.forEach(function(item, idx) {
+    html += '<div style="display:flex;gap:8px;margin-bottom:6px;min-width:0;" class="billable-row">'
+      + '<input class="form-input" placeholder="Description (e.g. Mileage, Hotel)" value="' + (item.desc || "") + '" style="flex:2;min-width:0;">'
+      + '<input class="form-input" type="number" step="0.01" placeholder="Amount" value="' + (item.amount || 0) + '" style="flex:1;min-width:0;max-width:120px;" onchange="calcJobTotals()">'
+      + '<button class="btn btn-sm btn-danger" onclick="this.parentElement.remove();calcJobTotals()" style="flex-shrink:0;">&times;</button></div>';
+  });
+  html += '</div><button class="btn btn-sm" onclick="addJobBillableRow()">+ Add billable expense</button></div>';
+
+  html += '<div class="form-row"><div class="form-group"><label class="form-label">Gross total <span style="font-weight:400;color:var(--fg3);text-transform:none;">(base + tax + expenses)</span></label>'
+    + '<input class="form-input" type="number" step="0.01" id="jGrossTotal" value="' + (job.GrossTotal || "") + '" style="font-weight:600;"></div>'
     + '<div class="form-group"><label class="form-label">Pipeline stage</label>'
     + '<select class="form-select" id="jPipelineStatus">';
   pStages.forEach(function(ps) { html += '<option' + (job.PipelineStatus === ps ? ' selected' : '') + '>' + ps + '</option>'; });
@@ -1633,12 +1648,58 @@ function calcJobTotals() {
   var rate = parseFloat(document.getElementById("jTaxRate").value) || 0;
   var tax = Math.round(base * rate / 100 * 100) / 100;
   document.getElementById("jTaxAmount").value = tax;
-  document.getElementById("jGrossTotal").value = Math.round((base + tax) * 100) / 100;
+
+  // Sum billable expenses
+  var billableTotal = 0;
+  var rows = document.querySelectorAll("#jBillableItems .billable-row");
+  rows.forEach(function(row) {
+    var inputs = row.querySelectorAll("input");
+    billableTotal += parseFloat(inputs[1].value) || 0;
+  });
+
+  document.getElementById("jGrossTotal").value = Math.round((base + tax + billableTotal) * 100) / 100;
+}
+
+function addJobBillableRow() {
+  var container = document.getElementById("jBillableItems");
+  var row = document.createElement("div");
+  row.style.cssText = "display:flex;gap:8px;margin-bottom:6px;min-width:0;";
+  row.className = "billable-row";
+  row.innerHTML = '<input class="form-input" placeholder="Description (e.g. Mileage, Hotel)" style="flex:2;min-width:0;">'
+    + '<input class="form-input" type="number" step="0.01" placeholder="Amount" value="0" style="flex:1;min-width:0;max-width:120px;" onchange="calcJobTotals()">'
+    + '<button class="btn btn-sm btn-danger" onclick="this.parentElement.remove();calcJobTotals()" style="flex-shrink:0;">&times;</button>';
+  container.appendChild(row);
+}
+
+function taxStatusChanged() {
+  var status = document.getElementById("jTaxStatus").value;
+  if (status === "Taxable") {
+    document.getElementById("jTaxRate").value = "8.25";
+  } else {
+    document.getElementById("jTaxRate").value = "0";
+  }
+  calcJobTotals();
 }
 
 async function saveJob() {
   var jobId = document.getElementById("jID").value;
   var existingJob = jobId ? S.jobs.find(function(j) { return j.ID === jobId; }) : null;
+
+  // Collect billable items
+  var billableItems = [];
+  var bRows = document.querySelectorAll("#jBillableItems .billable-row");
+  bRows.forEach(function(row) {
+    var inputs = row.querySelectorAll("input");
+    if (inputs[0].value || parseFloat(inputs[1].value)) {
+      billableItems.push({ desc: inputs[0].value, amount: parseFloat(inputs[1].value) || 0 });
+    }
+  });
+
+  // Merge billable items into PipelineData (preserve existing pipeline states)
+  var pipeData = existingJob ? (typeof existingJob.PipelineData === "object" ? existingJob.PipelineData : {}) : {};
+  try { if (typeof pipeData === "string") pipeData = JSON.parse(pipeData); } catch(e) { pipeData = {}; }
+  pipeData.billableItems = billableItems;
+
   var job = {
     ID: jobId,
     ClientName: document.getElementById("jClientName").value,
@@ -1657,7 +1718,7 @@ async function saveJob() {
     PaymentMethod: existingJob ? existingJob.PaymentMethod : "",
     PaymentStatus: existingJob ? existingJob.PaymentStatus : "Unpaid",
     PipelineStatus: document.getElementById("jPipelineStatus").value,
-    PipelineData: existingJob ? existingJob.PipelineData : {},
+    PipelineData: pipeData,
     PaymentResolved: existingJob ? existingJob.PaymentResolved : false,
     ResolvedReason: existingJob ? existingJob.ResolvedReason : "",
     ExpenseNotes: document.getElementById("jExpenseNotes").value,
@@ -1748,7 +1809,11 @@ async function updatePipeline(jobId, stageIdx) {
   var next = PIPE_CYCLE[(cycleIdx + 1) % PIPE_CYCLE.length];
   states[stage] = next;
 
-  job.PipelineData = states;
+  // Merge pipeline states back into PipelineData (preserve billableItems etc)
+  var fullPData = {};
+  try { fullPData = typeof job.PipelineData === "object" ? job.PipelineData : JSON.parse(job.PipelineData || "{}"); } catch(e) {}
+  stages.forEach(function(s) { fullPData[s] = states[s]; });
+  job.PipelineData = fullPData;
   // Update PipelineStatus for backward compat
   var labels = { pending: "Pending", current: "In Progress", done: "Done", na: "N/A" };
   job.PipelineStatus = stages[stageIdx] + " — " + labels[next];
@@ -1771,12 +1836,28 @@ function openInvoiceEditor(jobId, invId) {
   var isNew = !inv;
 
   if (isNew) {
+    // Build cost breakdown from job data including billable expenses
+    var invCostItems = [];
+    if (job) {
+      invCostItems.push({ desc: job.ServiceType || "Service", amount: parseFloat(job.BaseCharge) || 0 });
+      // Add billable items from job
+      var jobPData = {};
+      try { jobPData = typeof job.PipelineData === "object" ? job.PipelineData : JSON.parse(job.PipelineData || "{}"); } catch(e) {}
+      if (jobPData.billableItems && jobPData.billableItems.length) {
+        jobPData.billableItems.forEach(function(bi) {
+          if (bi.desc || bi.amount) invCostItems.push({ desc: bi.desc, amount: bi.amount });
+        });
+      }
+    } else {
+      invCostItems.push({ desc: "Service", amount: 0 });
+    }
+
     inv = {
       ID: "", InvoiceNumber: S.nextInvoiceNum, JobID: jobId || "",
       ClientName: job ? job.ClientName : "", BillToAddress: "",
       DateOfService: job ? job.EventDate : "", DateFiled: new Date().toISOString().split("T")[0],
       ServiceProvided: job ? job.ServiceType : "", Project: job ? job.JobName : "",
-      CostBreakdown: [{ desc: job ? (job.ServiceType || "Service") : "Service", amount: job ? (parseFloat(job.BaseCharge) || 0) : 0 }],
+      CostBreakdown: invCostItems,
       SalesTax: job ? (parseFloat(job.TaxAmount) || 0) : 0,
       Deposit: 0, TotalDue: job ? (parseFloat(job.GrossTotal) || 0) : 0,
       PaymentTerms: "N30", Status: "Draft", Notes: ""
