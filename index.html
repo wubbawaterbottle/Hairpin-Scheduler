@@ -626,46 +626,66 @@ function renderDashboard() {
   var filtered = S.filterQuarter === "all" ? allJobs : allJobs.filter(function(j) { return getQuarter(j.EventDate) === S.filterQuarter; });
   if (S.filter === "action") filtered = filtered.filter(needsAction);
 
-  // Metrics
-  var ytdGross = 0, ytdNet = 0, jobCount = 0, actionItems = 0;
-  var currentYear = new Date().getFullYear();
+  // Auto-calculate current quarter and last quarter from today's date
+  var now = new Date();
+  var curMonth = now.getMonth() + 1;
+  var curYear = now.getFullYear();
+  var curQ = curMonth <= 3 ? "Q1" : curMonth <= 6 ? "Q2" : curMonth <= 9 ? "Q3" : "Q4";
+  var curQuarterLabel = curQ + " " + curYear;
+
+  // Last quarter
+  var lqMap = { "Q1": "Q4", "Q2": "Q1", "Q3": "Q2", "Q4": "Q3" };
+  var lqYearOffset = curQ === "Q1" ? -1 : 0;
+  var lastQuarterLabel = lqMap[curQ] + " " + (curYear + lqYearOffset);
+
+  // Fiscal year = Jan 1 to Dec 31 of current year
+  var fyGross = 0, fyNet = 0, fyJobs = 0;
   allJobs.forEach(function(j) {
     var jYear = j.EventDate ? parseInt(String(j.EventDate).split("-")[0]) : 0;
-    if (jYear === currentYear) {
-      ytdGross += parseFloat(j.GrossTotal) || 0;
-      ytdNet += getJobTotalReceived(j.ID);
-      jobCount++;
+    if (jYear === curYear) {
+      fyGross += parseFloat(j.GrossTotal) || 0;
+      fyNet += getJobTotalReceived(j.ID);
+      fyJobs++;
     }
-    if (needsAction(j)) actionItems++;
   });
 
-  // Quarter metrics
-  var qMetrics = {};
-  quarters.forEach(function(q) {
-    qMetrics[q] = { gross: 0, net: 0, count: 0 };
-    jobsForQuarter(q).forEach(function(j) {
-      qMetrics[q].gross += parseFloat(j.GrossTotal) || 0;
-      qMetrics[q].net += getJobTotalReceived(j.ID);
-      qMetrics[q].count++;
-    });
+  // This quarter totals
+  var tqGross = 0, tqNet = 0, tqJobs = 0;
+  allJobs.forEach(function(j) {
+    if (getQuarter(j.EventDate) === curQuarterLabel) {
+      tqGross += parseFloat(j.GrossTotal) || 0;
+      tqNet += getJobTotalReceived(j.ID);
+      tqJobs++;
+    }
   });
+
+  // Last quarter totals
+  var lqGross = 0, lqNet = 0, lqJobs = 0;
+  allJobs.forEach(function(j) {
+    if (getQuarter(j.EventDate) === lastQuarterLabel) {
+      lqGross += parseFloat(j.GrossTotal) || 0;
+      lqNet += getJobTotalReceived(j.ID);
+      lqJobs++;
+    }
+  });
+
+  var actionItems = 0;
+  allJobs.forEach(function(j) { if (needsAction(j)) actionItems++; });
 
   var html = '<div class="page-header"><h2>Client dashboard</h2><div class="page-header-actions">'
     + '<button class="btn btn-accent" onclick="openJobEditor()">+ New job</button></div></div>';
 
-  // Metrics cards
+  // Metrics cards — auto-calculated
   html += '<div class="metrics">';
-  // Show last 3 quarters + YTD
-  var recentQs = quarters.slice(-3);
-  recentQs.forEach(function(q) {
-    var m = qMetrics[q];
-    html += '<div class="metric-card"><div class="metric-label">' + q + ' gross</div>'
-      + '<div class="metric-value">' + fmt$(m.gross) + '</div>'
-      + '<div class="metric-sub">' + m.count + ' jobs</div></div>';
-  });
-  html += '<div class="metric-card"><div class="metric-label">YTD ' + currentYear + '</div>'
-    + '<div class="metric-value">' + fmt$(ytdGross) + '</div>'
-    + '<div class="metric-sub">' + fmt$(ytdNet) + ' net received</div></div>';
+  html += '<div class="metric-card"><div class="metric-label">This quarter (' + curQuarterLabel + ')</div>'
+    + '<div class="metric-value">' + fmt$(tqGross) + '</div>'
+    + '<div class="metric-sub">' + fmt$(tqNet) + ' received · ' + tqJobs + ' jobs</div></div>';
+  html += '<div class="metric-card"><div class="metric-label">Last quarter (' + lastQuarterLabel + ')</div>'
+    + '<div class="metric-value">' + fmt$(lqGross) + '</div>'
+    + '<div class="metric-sub">' + fmt$(lqNet) + ' received · ' + lqJobs + ' jobs</div></div>';
+  html += '<div class="metric-card"><div class="metric-label">Fiscal year ' + curYear + '</div>'
+    + '<div class="metric-value">' + fmt$(fyGross) + '</div>'
+    + '<div class="metric-sub">' + fmt$(fyNet) + ' received · ' + fyJobs + ' jobs</div></div>';
   html += '</div>';
 
   // Alerts
@@ -679,14 +699,16 @@ function renderDashboard() {
       + alerts.length + ' items need attention: ' + alerts.join(' · ') + '</span></div>';
   }
 
-  // Filters
-  html += '<div class="filters">';
-  html += '<button class="filter-chip' + (S.filterQuarter === "all" ? ' active' : '') + '" onclick="setFilter(\'all\',\'quarter\')">All</button>';
+  // Filter — dropdown
+  html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">';
+  html += '<select class="form-select" style="width:auto;min-width:160px;" onchange="setFilter(this.value,\'quarter\')">';
+  html += '<option value="all"' + (S.filterQuarter === "all" ? " selected" : "") + '>All quarters</option>';
   quarters.forEach(function(q) {
-    html += '<button class="filter-chip' + (S.filterQuarter === q ? ' active' : '') + '" onclick="setFilter(\'' + q + '\',\'quarter\')">' + q + '</button>';
+    html += '<option value="' + q + '"' + (S.filterQuarter === q ? " selected" : "") + '>' + q + '</option>';
   });
+  html += '</select>';
   if (actionItems > 0) {
-    html += '<button class="filter-chip' + (S.filter === "action" ? ' danger' : '') + '" onclick="setFilter(\'action\',\'status\')" style="margin-left:auto;">Needs action (' + actionItems + ')</button>';
+    html += '<button class="filter-chip' + (S.filter === "action" ? ' danger' : '') + '" onclick="setFilter(\'action\',\'status\')">Needs action (' + actionItems + ')</button>';
   }
   html += '</div>';
 
@@ -846,8 +868,9 @@ function renderJobDetail(jobId) {
       html += '<tr><td>#' + inv.InvoiceNumber + '</td><td>' + fmtDate(inv.DateFiled) + '</td>'
         + '<td class="money">' + fmt$(inv.TotalDue) + '</td>'
         + '<td><span class="badge badge-' + (inv.Status || "draft").toLowerCase() + '">' + (inv.Status || "Draft") + '</span></td>'
-        + '<td><button class="btn btn-sm btn-ghost" onclick="viewInvoice(\'' + inv.ID + '\')">View</button>'
-        + '<button class="btn btn-sm btn-ghost" onclick="openInvoiceEditor(\'' + jobId + '\',\'' + inv.ID + '\')">Edit</button></td></tr>';
+        + '<td style="white-space:nowrap;"><button class="btn btn-sm btn-ghost" onclick="viewInvoice(\'' + inv.ID + '\')">View</button>'
+        + '<button class="btn btn-sm btn-ghost" onclick="openInvoiceEditor(\'' + jobId + '\',\'' + inv.ID + '\')">Edit</button>'
+        + '<button class="btn btn-sm btn-ghost btn-danger" onclick="deleteInvoice(\'' + inv.ID + '\')">Del</button></td></tr>';
     });
     html += '</tbody></table></div></div>';
   } else {
@@ -1310,7 +1333,7 @@ function renderInvoiceViewer(invId) {
     + '<div class="page-header-actions">'
     + '<button class="btn btn-sm" onclick="window.print()">Print / Save PDF</button></div></div>';
 
-  html += '<div class="invoice-page">';
+  html += '<div style="max-width:100%;overflow:hidden;"><div class="invoice-page">';
 
   // Header
   html += '<div class="inv-header"><div class="inv-biz">'
@@ -1366,7 +1389,7 @@ function renderInvoiceViewer(invId) {
   methods.forEach(function(m) {
     html += '<div class="pay-method"><span>' + m[0] + '</span><strong>' + m[1] + '</strong></div>';
   });
-  html += '</div></div>';
+  html += '</div></div></div>';
 
   document.getElementById("mainContent").innerHTML = html;
 }
@@ -1929,7 +1952,9 @@ function openInvoiceEditor(jobId, invId) {
 
   html += '<input type="hidden" id="iID" value="' + (inv.ID || "") + '">';
   html += '<input type="hidden" id="iJobID" value="' + (inv.JobID || "") + '">';
-  html += '<div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button>'
+  html += '<div class="modal-actions">';
+  if (!isNew) html += '<button class="btn btn-danger" onclick="deleteInvoice(\'' + inv.ID + '\');closeModal()" style="margin-right:auto;">Delete invoice</button>';
+  html += '<button class="btn" onclick="closeModal()">Cancel</button>'
     + '<button class="btn btn-accent" onclick="saveInvoice()">Save invoice</button></div>';
   html += '</div></div>';
 
@@ -2002,6 +2027,15 @@ async function saveInvoice() {
   toast("Invoice saved");
 
   var result = await apiWrite({ action: "saveInvoice", invoice: inv });
+  if (!result.success) toast("Sync failed", true);
+}
+
+async function deleteInvoice(id) {
+  if (!confirm("Delete this invoice?")) return;
+  S.invoices = S.invoices.filter(function(i) { return i.ID !== id; });
+  render();
+  toast("Invoice deleted");
+  var result = await apiWrite({ action: "deleteInvoice", id: id });
   if (!result.success) toast("Sync failed", true);
 }
 
