@@ -17,6 +17,8 @@ button,input,textarea,select{font-family:inherit}
 .main{display:flex;height:calc(100vh - 56px)}
 .left{width:260px;min-width:260px;border-right:1px solid #2a2520;overflow-y:auto;padding:12px;background:#18150f}
 .left-title{font-size:10px;color:#8a7e72;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600}
+.sort-sel{width:100%;margin-bottom:8px;padding:5px 8px;border-radius:5px;border:1px solid #3a342e;background:#141210;color:#a09585;font-size:11px;outline:none;cursor:pointer}
+.sort-sel:hover{border-color:#c49b2a66;color:#e8d5a0}
 .chip{border-radius:5px;padding:5px 9px;margin-bottom:4px;cursor:grab;font-size:11px;color:#e8e0d6;transition:all .12s}
 .chip:hover{transform:scale(1.01)}
 .chip .name{font-weight:600;margin-bottom:1px}
@@ -144,7 +146,8 @@ var DEFAULT_CAT_LIST = [
 var catList=JSON.parse(JSON.stringify(DEFAULT_CAT_LIST));
 var scenes=[];
 var sched={};
-var yr=2026,mo=4,selDay=null,dragId=null,dragFromKey=null;
+var yr=2026,mo=7,selDay=null,dragId=null,dragFromKey=null;
+var sortMode="name"; // name | complexity | location
 
 var CC={1:"#4a9e6e",2:"#6b9e4a",3:"#c49b2a",4:"#d4772a",5:"#c94040"};
 var CL={1:"Simple",2:"Easy",3:"Medium",4:"Hard",5:"Major"};
@@ -222,12 +225,37 @@ async function saveCatsToSheet(){var r=await apiWrite({action:"saveCategories",c
 // ── RENDER ───────────────────────────────────────────────────
 function render(){renderLeft();renderCal();if(selDay)renderDayPanel(selDay)}
 
+function setSort(mode){sortMode=mode;renderLeft()}
+
+function alphaCmp(a,b){return String(a||"").localeCompare(String(b||""),undefined,{numeric:true,sensitivity:"base"})}
+
+function sortFn(){
+  if(sortMode==="complexity"){
+    // Hardest first, then alphabetical within the same complexity
+    return function(a,b){return (b.complexity||0)-(a.complexity||0)||alphaCmp(a.name,b.name)}
+  }
+  if(sortMode==="location"){
+    // Group by first location, then alphabetical within each location
+    return function(a,b){
+      var la=(a.locations&&a.locations.length)?a.locations[0]:"~none";
+      var lb=(b.locations&&b.locations.length)?b.locations[0]:"~none";
+      return alphaCmp(la,lb)||alphaCmp(a.name,b.name);
+    }
+  }
+  // default: sequential / alphabetical by scene name
+  return function(a,b){return alphaCmp(a.name,b.name)}
+}
+
 function renderLeft(){
   var el=document.getElementById("leftPanel");
   var sset=scheduledSet();
   var unsched=[];for(var i=0;i<scenes.length;i++){if(!sset.has(scenes[i].id))unsched.push(scenes[i])}
-  unsched.sort(function(a,b){return b.complexity-a.complexity||b.cast.length-a.cast.length});
+  unsched.sort(sortFn());
   var h='<div class="left-title">Unscheduled ('+unsched.length+')</div>';
+  h+='<select class="sort-sel" onchange="setSort(this.value)">';
+  var sopts=[["name","Sort: Sequential"],["complexity","Sort: Complexity"],["location","Sort: Location"]];
+  for(var i=0;i<sopts.length;i++){h+='<option value="'+sopts[i][0]+'"'+(sortMode===sopts[i][0]?' selected':'')+'>'+sopts[i][1]+'</option>'}
+  h+='</select>';
   for(var i=0;i<unsched.length;i++){var s=unsched[i];
     h+='<div class="chip" draggable="true" ondragstart="startDrag(\''+s.id+'\',null)" onclick="openEditor(\''+s.id+'\')" style="background:linear-gradient(135deg,'+CC[s.complexity]+'22,'+CC[s.complexity]+'11);border:1.5px solid '+CC[s.complexity]+'55;border-left:4px solid '+CC[s.complexity]+'">';
     h+='<div class="name">'+esc(s.name)+'</div><div class="tags">';
