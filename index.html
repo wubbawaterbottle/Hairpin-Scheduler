@@ -18,6 +18,16 @@ button,input,textarea,select{font-family:inherit}
 .left{width:260px;min-width:260px;border-right:1px solid #2a2520;overflow-y:auto;padding:12px;background:#18150f}
 .left-title{font-size:10px;color:#8a7e72;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600}
 .sort-sel{width:100%;margin-bottom:8px;padding:5px 8px;border-radius:5px;border:1px solid #3a342e;background:#141210;color:#a09585;font-size:11px;outline:none;cursor:pointer}
+.sec-head{display:flex;align-items:center;gap:6px;padding:6px 4px;cursor:pointer;user-select:none;border-radius:4px}
+.sec-head:hover{background:rgba(255,255,255,.03)}
+.sec-head .sh-arrow{font-size:9px;color:#6a5e52}
+.sec-head .sh-title{font-size:10px;color:#8a7e72;text-transform:uppercase;letter-spacing:1px;font-weight:600;flex:1}
+.sec-head .sh-count{font-size:9px;padding:1px 7px;border-radius:9px;background:#c49b2a1f;color:#c49b2a;font-weight:700}
+.sec-head.done .sh-count{background:rgba(74,158,110,.15);color:#4a9e6e}
+.chip .cdate{float:right;font-size:9px;color:#c49b2a;font-weight:700;margin-left:6px}
+.chip.hl-off{opacity:.25;filter:grayscale(1)}
+.chip.hl-on{box-shadow:0 0 0 1px #c49b2a55}
+.sec-div{height:1px;background:#2a2520;margin:12px 0 4px}
 .sort-sel:hover{border-color:#c49b2a66;color:#e8d5a0}
 .chip{border-radius:5px;padding:5px 9px;margin-bottom:4px;cursor:grab;font-size:11px;color:#e8e0d6;transition:all .12s}
 .chip:hover{transform:scale(1.01)}
@@ -41,6 +51,26 @@ button,input,textarea,select{font-family:inherit}
 .cal-day.we .dnum span{color:#6a5e52}
 .cal-day .badge{font-size:7px;padding:1px 4px;border-radius:8px;font-weight:600}
 .mini-chip{font-size:9px;padding:2px 4px;margin-bottom:1px;border-radius:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:grab;color:#e8e0d6}
+/* highlight states */
+.mini-chip.hl-on{filter:saturate(1.6) brightness(1.25);box-shadow:0 0 0 1px currentColor inset,0 0 8px -2px currentColor;font-weight:600}
+.mini-chip.hl-off{opacity:.2;filter:grayscale(1)}
+.cal-day.hl-dim{opacity:.55}
+.cal-day.hl-hit{border-color:#c49b2a55}
+.dnum .hl-count{font-size:7px;padding:1px 4px;border-radius:8px;font-weight:700;background:#c49b2a33;color:#e8d5a0;margin-left:3px}
+/* highlight bar */
+.hl-bar{margin-top:12px;background:rgba(26,23,20,.53);border:1px solid #2a2520;border-radius:7px;overflow:hidden}
+.hl-head{padding:9px 12px;display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.hl-head:hover{background:rgba(255,255,255,.02)}
+.hl-head .hl-t{font-size:10px;color:#8a7e72;text-transform:uppercase;letter-spacing:1px;font-weight:600;flex:1}
+.hl-head .hl-badge{font-size:9px;padding:2px 7px;border-radius:9px;background:#c49b2a22;color:#e8d5a0;font-weight:600}
+.hl-head .hl-arrow{color:#6a5e52;font-size:10px}
+.hl-body{padding:4px 12px 12px;border-top:1px solid #2a2520}
+.hl-cat{margin-bottom:8px}
+.hl-cat .hl-label{font-size:9px;color:#6a5e52;text-transform:uppercase;margin-bottom:3px;letter-spacing:.5px}
+.hl-summary{margin-top:8px;padding:9px 10px;background:#141210;border:1px solid #3a342e;border-radius:6px;font-size:11px;color:#c9b896;line-height:1.7}
+.hl-summary .hs-name{color:#e8d5a0;font-weight:600}
+.hl-summary .hs-dates{color:#8a7e72;font-size:10px}
+.hl-clear{padding:3px 10px;border-radius:4px;border:1px solid rgba(201,64,64,.3);background:rgba(201,64,64,.08);color:#c94040;font-size:10px;cursor:pointer;font-weight:600}
 .stats{margin-top:14px;padding:12px;background:rgba(26,23,20,.53);border-radius:7px;border:1px solid #2a2520;display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
 .stats .s{text-align:center}
 .stats .s .n{font-size:18px;font-weight:700}
@@ -147,7 +177,11 @@ var catList=JSON.parse(JSON.stringify(DEFAULT_CAT_LIST));
 var scenes=[];
 var sched={};
 var yr=2026,mo=7,selDay=null,dragId=null,dragFromKey=null;
-var sortMode="name"; // name | complexity | location
+var sortMode="name";   // unscheduled sort: name | complexity | location
+var sortModeS="date";  // scheduled sort: date | name | complexity | location
+var openUn=true, openSch=true;  // sidebar section collapse state
+var highlight={};      // {catKey:[values]} — highlight/dim filter for calendar
+var hlOpen=false;      // is the highlight bar expanded
 
 var CC={1:"#4a9e6e",2:"#6b9e4a",3:"#c49b2a",4:"#d4772a",5:"#c94040"};
 var CL={1:"Simple",2:"Easy",3:"Medium",4:"Hard",5:"Major"};
@@ -226,15 +260,33 @@ async function saveCatsToSheet(){var r=await apiWrite({action:"saveCategories",c
 function render(){renderLeft();renderCal();if(selDay)renderDayPanel(selDay)}
 
 function setSort(mode){sortMode=mode;renderLeft()}
+function setSortS(mode){sortModeS=mode;renderLeft()}
+function toggleSec(which){if(which==="un")openUn=!openUn;else openSch=!openSch;renderLeft()}
+
+// Map every scheduled scene id -> its date key
+function schedDateMap(){
+  var m={},ks=Object.keys(sched);
+  for(var i=0;i<ks.length;i++){var ids=sched[ks[i]];for(var j=0;j<ids.length;j++)m[ids[j]]=ks[i]}
+  return m;
+}
 
 function alphaCmp(a,b){return String(a||"").localeCompare(String(b||""),undefined,{numeric:true,sensitivity:"base"})}
 
-function sortFn(){
-  if(sortMode==="complexity"){
+function sortFn(mode,dateMap){
+  mode=mode||sortMode;
+  if(mode==="date"){
+    // Chronological by shoot date, then alphabetical within a day
+    return function(a,b){
+      var da=(dateMap&&dateMap[a.id])||"9999",db=(dateMap&&dateMap[b.id])||"9999";
+      if(da!==db)return da<db?-1:1;
+      return alphaCmp(a.name,b.name);
+    }
+  }
+  if(mode==="complexity"){
     // Hardest first, then alphabetical within the same complexity
     return function(a,b){return (b.complexity||0)-(a.complexity||0)||alphaCmp(a.name,b.name)}
   }
-  if(sortMode==="location"){
+  if(mode==="location"){
     // Group by first location, then alphabetical within each location
     return function(a,b){
       var la=(a.locations&&a.locations.length)?a.locations[0]:"~none";
@@ -246,34 +298,155 @@ function sortFn(){
   return function(a,b){return alphaCmp(a.name,b.name)}
 }
 
+function chipHTML(s,fromKey,dateLabel){
+  var cls="chip";
+  if(hlActive())cls+=hlMatch(s)?" hl-on":" hl-off";
+  var fk=fromKey?("'"+fromKey+"'"):"null";
+  var h='<div class="'+cls+'" draggable="true" ondragstart="startDrag(\''+s.id+'\','+fk+')" onclick="openEditor(\''+s.id+'\')" style="background:linear-gradient(135deg,'+CC[s.complexity]+'22,'+CC[s.complexity]+'11);border:1.5px solid '+CC[s.complexity]+'55;border-left:4px solid '+CC[s.complexity]+'">';
+  h+='<div class="name">'+(dateLabel?'<span class="cdate">'+dateLabel+'</span>':'')+esc(s.name)+'</div><div class="tags">';
+  if(s.cast)for(var j=0;j<s.cast.length;j++)h+='<span>'+esc(s.cast[j])+'</span>';
+  if(s.timeOfDay)for(var j=0;j<s.timeOfDay.length;j++)h+='<span class="tod">'+esc(s.timeOfDay[j])+'</span>';
+  return h+'</div></div>';
+}
+
+function sortSelect(fnName,current,opts){
+  var h='<select class="sort-sel" onchange="'+fnName+'(this.value)">';
+  for(var i=0;i<opts.length;i++)h+='<option value="'+opts[i][0]+'"'+(current===opts[i][0]?' selected':'')+'>'+opts[i][1]+'</option>';
+  return h+'</select>';
+}
+
 function renderLeft(){
   var el=document.getElementById("leftPanel");
   var sset=scheduledSet();
-  var unsched=[];for(var i=0;i<scenes.length;i++){if(!sset.has(scenes[i].id))unsched.push(scenes[i])}
-  unsched.sort(sortFn());
-  var h='<div class="left-title">Unscheduled ('+unsched.length+')</div>';
-  h+='<select class="sort-sel" onchange="setSort(this.value)">';
-  var sopts=[["name","Sort: Sequential"],["complexity","Sort: Complexity"],["location","Sort: Location"]];
-  for(var i=0;i<sopts.length;i++){h+='<option value="'+sopts[i][0]+'"'+(sortMode===sopts[i][0]?' selected':'')+'>'+sopts[i][1]+'</option>'}
-  h+='</select>';
-  for(var i=0;i<unsched.length;i++){var s=unsched[i];
-    h+='<div class="chip" draggable="true" ondragstart="startDrag(\''+s.id+'\',null)" onclick="openEditor(\''+s.id+'\')" style="background:linear-gradient(135deg,'+CC[s.complexity]+'22,'+CC[s.complexity]+'11);border:1.5px solid '+CC[s.complexity]+'55;border-left:4px solid '+CC[s.complexity]+'">';
-    h+='<div class="name">'+esc(s.name)+'</div><div class="tags">';
-    var castCat=getCat("cast");
-    if(s.cast)for(var j=0;j<s.cast.length;j++)h+='<span>'+esc(s.cast[j])+'</span>';
-    if(s.timeOfDay)for(var j=0;j<s.timeOfDay.length;j++)h+='<span class="tod">'+esc(s.timeOfDay[j])+'</span>';
-    h+='</div></div>';
+  var dmap=schedDateMap();
+
+  var unsched=[],schd=[];
+  for(var i=0;i<scenes.length;i++){
+    if(sset.has(scenes[i].id))schd.push(scenes[i]);else unsched.push(scenes[i]);
   }
-  if(!unsched.length)h+='<div style="font-size:11px;color:#5a5248;text-align:center;padding:16px">No scenes yet — click + New Scene</div>';
+  unsched.sort(sortFn(sortMode,dmap));
+  schd.sort(sortFn(sortModeS,dmap));
+
+  // ── UNSCHEDULED ──
+  var h='<div class="sec-head" onclick="toggleSec(\'un\')">';
+  h+='<span class="sh-arrow">'+(openUn?"&#9660;":"&#9654;")+'</span>';
+  h+='<span class="sh-title">Unscheduled</span><span class="sh-count">'+unsched.length+'</span></div>';
+  if(openUn){
+    h+=sortSelect("setSort",sortMode,[["name","Sort: Sequential"],["complexity","Sort: Complexity"],["location","Sort: Location"]]);
+    for(var i=0;i<unsched.length;i++)h+=chipHTML(unsched[i],null,"");
+    if(!unsched.length)h+='<div style="font-size:11px;color:#4a9e6e;text-align:center;padding:12px">All scenes scheduled</div>';
+  }
+
+  // ── SCHEDULED ──
+  h+='<div class="sec-div"></div>';
+  h+='<div class="sec-head done" onclick="toggleSec(\'sch\')">';
+  h+='<span class="sh-arrow">'+(openSch?"&#9660;":"&#9654;")+'</span>';
+  h+='<span class="sh-title">Scheduled</span><span class="sh-count">'+schd.length+'</span></div>';
+  if(openSch){
+    h+=sortSelect("setSortS",sortModeS,[["date","Sort: Shoot Date"],["name","Sort: Sequential"],["complexity","Sort: Complexity"],["location","Sort: Location"]]);
+    for(var i=0;i<schd.length;i++){
+      var dk2=dmap[schd[i].id];
+      h+=chipHTML(schd[i],dk2,dk2?fmtDK(dk2):"");
+    }
+    if(!schd.length)h+='<div style="font-size:11px;color:#5a5248;text-align:center;padding:12px">Nothing scheduled yet</div>';
+  }
+
+  // ── LEGEND ──
   h+='<div class="legend"><div class="lg-title">Complexity</div>';
   for(var n=1;n<=5;n++)h+='<div class="lg-item"><div class="lg-dot" style="background:'+CC[n]+'"></div><div class="lg-label">'+CL[n]+'</div></div>';
   h+='</div>';
   el.innerHTML=h;
 }
 
+
+// ── HIGHLIGHT HELPERS ────────────────────────────────────────
+function hlActive(){for(var i=0;i<catList.length;i++){var v=highlight[catList[i].key];if(v&&v.length)return true}return false}
+
+// OR within a category, AND across categories (same logic as the day panel)
+function hlMatch(s){
+  for(var ci=0;ci<catList.length;ci++){
+    var ck=catList[ci].key,sel=highlight[ck];
+    if(!sel||!sel.length)continue;
+    var sv=s[ck]||[],found=false;
+    for(var j=0;j<sv.length;j++){if(sel.indexOf(sv[j])>=0){found=true;break}}
+    if(!found)return false;
+  }
+  return true;
+}
+
+function toggleHL(catKey,idx){
+  var cat=getCat(catKey);if(!cat)return;
+  var val=cat.options[idx];
+  if(!highlight[catKey])highlight[catKey]=[];
+  var i=highlight[catKey].indexOf(val);
+  if(i>=0)highlight[catKey].splice(i,1);else highlight[catKey].push(val);
+  if(!highlight[catKey].length)delete highlight[catKey];
+  renderCal();renderLeft();
+}
+function clearHL(){highlight={};renderCal();renderLeft()}
+function toggleHLBar(){hlOpen=!hlOpen;renderCal()}
+
+// Every scheduled date that contains at least one matching scene, sorted
+function hlDates(){
+  var out=[],ks=Object.keys(sched);
+  for(var i=0;i<ks.length;i++){
+    var ids=sched[ks[i]];
+    for(var j=0;j<ids.length;j++){
+      var s=getScene(ids[j]);
+      if(s&&hlMatch(s)){out.push(ks[i]);break}
+    }
+  }
+  out.sort();
+  return out;
+}
+function fmtDK(k){
+  var p=String(k).split("-");
+  if(p.length!==3)return k;
+  return MO[parseInt(p[1],10)-1].slice(0,3)+" "+parseInt(p[2],10);
+}
+
+function renderHLBar(){
+  var on=hlActive(),n=0;
+  for(var i=0;i<catList.length;i++){var v=highlight[catList[i].key];if(v)n+=v.length}
+  var h='<div class="hl-bar"><div class="hl-head" onclick="toggleHLBar()">';
+  h+='<span class="hl-arrow">'+(hlOpen?"&#9660;":"&#9654;")+'</span>';
+  h+='<span class="hl-t">Highlight Scenes</span>';
+  if(on)h+='<span class="hl-badge">'+n+' active</span>';
+  h+='</div>';
+  if(hlOpen){
+    h+='<div class="hl-body">';
+    for(var ci=0;ci<catList.length;ci++){
+      var cat=catList[ci];
+      if(!cat.options.length)continue;
+      h+='<div class="hl-cat"><div class="hl-label">'+esc(cat.label)+'</div><div class="tog-row">';
+      for(var oi=0;oi<cat.options.length;oi++){
+        var o=cat.options[oi];
+        var sel=highlight[cat.key]&&highlight[cat.key].indexOf(o)>=0;
+        h+='<button class="tog'+(sel?' pos':'')+'" style="--tc:'+cat.color+'" onclick="toggleHL(\''+cat.key+'\','+oi+')">'+esc(o)+'</button>';
+      }
+      h+='</div></div>';
+    }
+    if(on){
+      var total=0,ks=Object.keys(sched);
+      for(var i=0;i<ks.length;i++){for(var j=0;j<sched[ks[i]].length;j++){var s=getScene(sched[ks[i]][j]);if(s&&hlMatch(s))total++}}
+      var dts=hlDates(),labels=[];
+      for(var i=0;i<catList.length;i++){var v=highlight[catList[i].key];if(v&&v.length)labels=labels.concat(v)}
+      var shown=dts.slice(0,14).map(fmtDK).join(" &middot; ");
+      if(dts.length>14)shown+=" &middot; +"+(dts.length-14)+" more";
+      h+='<div class="hl-summary"><span class="hs-name">'+esc(labels.join(" + "))+'</span> &mdash; '+total+' scene'+(total===1?"":"s")+' across '+dts.length+' shoot day'+(dts.length===1?"":"s");
+      if(dts.length)h+='<br><span class="hs-dates">'+shown+'</span>';
+      h+='</div>';
+      h+='<div style="margin-top:8px"><button class="hl-clear" onclick="clearHL()">Clear highlights</button></div>';
+    }
+    h+='</div>';
+  }
+  return h+'</div>';
+}
+
 function renderCal(){
   var el=document.getElementById("calWrap");
   var dim=daysIn(yr,mo),fd=firstDow(yr,mo),sset=scheduledSet();
+  var HLON=hlActive();
   var unschedCount=0;for(var i=0;i<scenes.length;i++){if(!sset.has(scenes[i].id))unschedCount++}
   var h='<div class="cal-nav"><button onclick="prevMo()">&#8249;</button><h2>'+MO[mo]+' '+yr+'</h2><button onclick="nextMo()">&#8250;</button></div><div class="cal-grid">';
   for(var i=0;i<7;i++)h+='<div class="cal-head">'+DN[i]+'</div>';
@@ -283,12 +456,27 @@ function renderCal(){
     for(var j=0;j<ids.length;j++){var sc=getScene(ids[j]);if(sc)ds.push(sc)}
     var sel=selDay===d,we=(fd+d-1)%7===0||(fd+d-1)%7===6,tc=0;
     for(var j=0;j<ds.length;j++)tc+=ds[j].complexity;
-    h+='<div class="cal-day'+(sel?' sel':'')+(we?' we':'')+'" onclick="selectDay('+d+')" ondragover="event.preventDefault()" ondrop="dropOnDay(event,'+d+')">';
+
+    // When highlighting, float matching scenes to the top of the cell
+    var hitCount=0;
+    if(HLON){
+      var hit=[],miss=[];
+      for(var j=0;j<ds.length;j++){if(hlMatch(ds[j]))hit.push(ds[j]);else miss.push(ds[j])}
+      hitCount=hit.length;
+      ds=hit.concat(miss);
+    }
+    var dayCls="cal-day"+(sel?" sel":"")+(we?" we":"");
+    if(HLON)dayCls+=hitCount?" hl-hit":" hl-dim";
+
+    h+='<div class="'+dayCls+'" onclick="selectDay('+d+')" ondragover="event.preventDefault()" ondrop="dropOnDay(event,'+d+')">';
     h+='<div class="dnum"><span>'+d+'</span>';
-    if(ds.length)h+='<span class="badge" style="background:'+(tc>8?'#c9404033':'#c49b2a22')+';color:'+(tc>8?'#e8a0a0':'#c49b2a')+'">'+ds.length+'s</span>';
+    if(HLON&&hitCount)h+='<span class="hl-count">'+hitCount+'</span>';
+    else if(ds.length)h+='<span class="badge" style="background:'+(tc>8?'#c9404033':'#c49b2a22')+';color:'+(tc>8?'#e8a0a0':'#c49b2a')+'">'+ds.length+'s</span>';
     h+='</div>';
     for(var j=0;j<Math.min(ds.length,3);j++){var s=ds[j];
-      h+='<div class="mini-chip" draggable="true" ondragstart="event.stopPropagation();startDrag(\''+s.id+'\',\''+k+'\')" style="background:'+CC[s.complexity]+'22;border-left:2px solid '+CC[s.complexity]+'">'+esc(s.name)+'</div>';}
+      var cls="mini-chip";
+      if(HLON)cls+=hlMatch(s)?" hl-on":" hl-off";
+      h+='<div class="'+cls+'" draggable="true" ondragstart="event.stopPropagation();startDrag(\''+s.id+'\',\''+k+'\')" style="background:'+CC[s.complexity]+'22;border-left:2px solid '+CC[s.complexity]+';color:'+CC[s.complexity]+'">'+esc(s.name)+'</div>';}
     if(ds.length>3)h+='<div style="font-size:8px;color:#6a5e52;text-align:center">+'+(ds.length-3)+'</div>';
     h+='</div>';
   }
@@ -297,6 +485,7 @@ function renderCal(){
   var arr=[{v:sd,l:"Shoot Days",c:"#e8d5a0"},{v:sset.size,l:"Scheduled",c:"#e8d5a0"},{v:unschedCount,l:"Remaining",c:unschedCount?"#c49b2a":"#4a9e6e"},{v:scenes.length,l:"Total",c:"#e8d5a0"}];
   for(var i=0;i<arr.length;i++)h+='<div class="s"><div class="n" style="color:'+arr[i].c+'">'+arr[i].v+'</div><div class="l">'+arr[i].l+'</div></div>';
   h+='</div>';
+  h+=renderHLBar();
   el.innerHTML=h;
 }
 
