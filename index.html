@@ -41,7 +41,7 @@ button,input,textarea,select{font-family:inherit}
 .cal-nav h2{font-family:'EB Garamond',Georgia,serif;font-size:18px;font-weight:400;color:#e8d5a0;min-width:160px;text-align:center}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
 .cal-head{text-align:center;font-size:9px;color:#6a5e52;padding:5px 0;text-transform:uppercase;letter-spacing:1px}
-.cal-day{min-height:85px;border:1px solid rgba(42,37,32,.53);border-radius:5px;padding:4px;cursor:pointer;transition:all .12s;position:relative}
+.cal-day{min-height:118px;border:1px solid rgba(42,37,32,.53);border-radius:5px;padding:4px;cursor:pointer;transition:all .12s;position:relative}
 .cal-day:hover{border-color:#3a342e}
 .cal-day.sel{border:1.5px solid #c49b2a;background:#2a2520}
 .cal-day.we{background:rgba(26,23,20,.53)}
@@ -473,11 +473,11 @@ function renderCal(){
     if(HLON&&hitCount)h+='<span class="hl-count">'+hitCount+'</span>';
     else if(ds.length)h+='<span class="badge" style="background:'+(tc>8?'#c9404033':'#c49b2a22')+';color:'+(tc>8?'#e8a0a0':'#c49b2a')+'">'+ds.length+'s</span>';
     h+='</div>';
-    for(var j=0;j<Math.min(ds.length,3);j++){var s=ds[j];
+    for(var j=0;j<Math.min(ds.length,5);j++){var s=ds[j];
       var cls="mini-chip";
       if(HLON)cls+=hlMatch(s)?" hl-on":" hl-off";
       h+='<div class="'+cls+'" draggable="true" ondragstart="event.stopPropagation();startDrag(\''+s.id+'\',\''+k+'\')" style="background:'+CC[s.complexity]+'22;border-left:2px solid '+CC[s.complexity]+';color:'+CC[s.complexity]+'">'+esc(s.name)+'</div>';}
-    if(ds.length>3)h+='<div style="font-size:8px;color:#6a5e52;text-align:center">+'+(ds.length-3)+'</div>';
+    if(ds.length>5)h+='<div style="font-size:8px;color:#6a5e52;text-align:center">+'+(ds.length-5)+'</div>';
     h+='</div>';
   }
   h+='</div><div class="stats">';
