@@ -41,7 +41,7 @@ button,input,textarea,select{font-family:inherit}
 .cal-nav h2{font-family:'EB Garamond',Georgia,serif;font-size:18px;font-weight:400;color:#e8d5a0;min-width:160px;text-align:center}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
 .cal-head{text-align:center;font-size:9px;color:#6a5e52;padding:5px 0;text-transform:uppercase;letter-spacing:1px}
-.cal-day{min-height:118px;border:1px solid rgba(42,37,32,.53);border-radius:5px;padding:4px;cursor:pointer;transition:all .12s;position:relative}
+.cal-day{min-height:102px;border:1px solid rgba(42,37,32,.53);border-radius:5px;padding:4px;cursor:pointer;transition:all .12s;position:relative}
 .cal-day:hover{border-color:#3a342e}
 .cal-day.sel{border:1.5px solid #c49b2a;background:#2a2520}
 .cal-day.we{background:rgba(26,23,20,.53)}
@@ -137,6 +137,72 @@ button,input,textarea,select{font-family:inherit}
 .cat-row .cr-ren{border:1px solid #3a342e;background:none;color:#a09585}
 .cat-row .cr-del{border:1px solid rgba(201,64,64,.27);background:rgba(201,64,64,.07);color:#c94040}
 .cat-row .cr-up,.cat-row .cr-dn{border:1px solid #3a342e;background:none;color:#8a7e72;padding:2px 5px;font-size:9px}
+
+/* ═══ SIDEBAR TOGGLE / DRAWER ═══ */
+.sb-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:790}
+.left{transition:transform .18s ease}
+.left:not(.open){display:none}
+
+/* ═══ MOBILE ═══ */
+@media (max-width:900px){
+  .header{padding:10px 12px;gap:6px}
+  .header h1{font-size:17px}
+  .header .sub{font-size:8px;letter-spacing:1.2px}
+  .hbtn{padding:8px 11px;font-size:12px}
+
+  .main{height:calc(100vh - 52px)}
+
+  /* sidebar becomes a slide-in drawer */
+  .left{position:fixed;left:0;top:0;bottom:0;width:82%;max-width:320px;z-index:800;
+        box-shadow:6px 0 28px rgba(0,0,0,.6);padding-top:14px}
+  .left.open{display:block}
+  .sb-backdrop.show{display:block}
+
+  .cal-wrap{padding:10px 8px}
+  .cal-nav h2{font-size:16px;min-width:120px}
+  .cal-nav button{width:34px;height:34px}
+  .cal-grid{gap:1px}
+  .cal-day{min-height:78px;padding:3px;border-radius:4px}
+  .cal-day .dnum span{font-size:10px}
+  .mini-chip{font-size:8px;padding:2px 3px;line-height:1.25}
+  .cal-head{font-size:8px;padding:4px 0}
+
+  /* day panel takes the full screen */
+  .daypanel{width:100%;max-width:100%;left:0}
+  .daypanel .dp-head{padding:14px 14px}
+  .daypanel .dp-body{padding:14px}
+
+  /* bigger tap targets */
+  .tog{padding:7px 12px;font-size:12px}
+  .sort-sel{padding:8px;font-size:12px}
+  .sec-head{padding:9px 4px}
+  .mi-add,.ar-rem{padding:7px 10px;font-size:11px}
+
+  /* modals fill the screen */
+  .modal{width:96%;max-width:96%;max-height:92vh;padding:18px;border-radius:10px}
+  .modal h2{font-size:18px}
+  .settings-wrap{flex-direction:column;max-height:88vh}
+  .settings-nav{width:100%;min-width:0;display:flex;flex-wrap:wrap;gap:2px;padding:10px;
+                border-right:none;border-bottom:1px solid #3a342e}
+  .settings-nav .sn-title{width:100%;padding:0 4px 8px}
+  .settings-nav .sn-item{border-left:none;border-radius:5px;padding:7px 11px;font-size:12px}
+  .settings-nav .sn-item.active{border-left:none;box-shadow:inset 0 0 0 1px #c49b2a66}
+  .settings-body{padding:14px}
+
+  .stats{gap:12px;padding:10px}
+  .stats .s .n{font-size:16px}
+  .hl-body{padding:4px 10px 12px}
+  .toast{left:12px;right:12px;bottom:12px;text-align:center}
+  .cat-row{flex-wrap:wrap}
+}
+
+@media (max-width:420px){
+  .cal-day{min-height:64px}
+  .mini-chip{font-size:0;padding:3px 0;height:6px;border-radius:2px}
+  .mini-chip.hl-on{height:8px}
+  .cal-day .dnum span{font-size:11px}
+  .left{width:88%}
+}
 </style>
 </head>
 <body>
@@ -144,10 +210,12 @@ button,input,textarea,select{font-family:inherit}
 <div class="header">
   <div><h1>PROJECT HAIRPIN</h1><div class="sub">Production Scheduler</div></div>
   <div style="display:flex;gap:6px">
+    <button class="hbtn gold" id="sbToggle" onclick="toggleSidebar()">☰ Scenes</button>
     <button class="hbtn" onclick="openSettings()">⚙ Settings</button>
     <button class="hbtn gold" onclick="openEditor(null)">+ New Scene</button>
   </div>
 </div>
+<div class="sb-backdrop" id="sbBackdrop" onclick="toggleSidebar()"></div>
 <div class="main">
   <div class="left" id="leftPanel"></div>
   <div class="cal-wrap" id="calWrap"></div>
@@ -180,8 +248,9 @@ var yr=2026,mo=7,selDay=null,dragId=null,dragFromKey=null;
 var sortMode="name";   // unscheduled sort: name | complexity | location
 var sortModeS="date";  // scheduled sort: date | name | complexity | location
 var openUn=true, openSch=true;  // sidebar section collapse state
+var sidebarOpen=false;  // sidebar starts closed on every device
 var highlight={};      // {catKey:[values]} — highlight/dim filter for calendar
-var hlOpen=false;      // is the highlight bar expanded
+var hlOpen=true;       // highlight bar starts expanded
 
 var CC={1:"#4a9e6e",2:"#6b9e4a",3:"#c49b2a",4:"#d4772a",5:"#c94040"};
 var CL={1:"Simple",2:"Easy",3:"Medium",4:"Hard",5:"Major"};
@@ -258,6 +327,14 @@ async function saveCatsToSheet(){var r=await apiWrite({action:"saveCategories",c
 
 // ── RENDER ───────────────────────────────────────────────────
 function render(){renderLeft();renderCal();if(selDay)renderDayPanel(selDay)}
+
+function toggleSidebar(){sidebarOpen=!sidebarOpen;applySidebar()}
+function applySidebar(){
+  var el=document.getElementById("leftPanel"),bd=document.getElementById("sbBackdrop"),bt=document.getElementById("sbToggle");
+  if(!el)return;
+  if(sidebarOpen){el.classList.add("open");if(bd)bd.classList.add("show");if(bt)bt.classList.add("gold")}
+  else{el.classList.remove("open");if(bd)bd.classList.remove("show");if(bt)bt.classList.remove("gold")}
+}
 
 function setSort(mode){sortMode=mode;renderLeft()}
 function setSortS(mode){sortModeS=mode;renderLeft()}
@@ -356,6 +433,7 @@ function renderLeft(){
   for(var n=1;n<=5;n++)h+='<div class="lg-item"><div class="lg-dot" style="background:'+CC[n]+'"></div><div class="lg-label">'+CL[n]+'</div></div>';
   h+='</div>';
   el.innerHTML=h;
+  applySidebar();
 }
 
 
@@ -473,11 +551,11 @@ function renderCal(){
     if(HLON&&hitCount)h+='<span class="hl-count">'+hitCount+'</span>';
     else if(ds.length)h+='<span class="badge" style="background:'+(tc>8?'#c9404033':'#c49b2a22')+';color:'+(tc>8?'#e8a0a0':'#c49b2a')+'">'+ds.length+'s</span>';
     h+='</div>';
-    for(var j=0;j<Math.min(ds.length,5);j++){var s=ds[j];
+    for(var j=0;j<Math.min(ds.length,4);j++){var s=ds[j];
       var cls="mini-chip";
       if(HLON)cls+=hlMatch(s)?" hl-on":" hl-off";
       h+='<div class="'+cls+'" draggable="true" ondragstart="event.stopPropagation();startDrag(\''+s.id+'\',\''+k+'\')" style="background:'+CC[s.complexity]+'22;border-left:2px solid '+CC[s.complexity]+';color:'+CC[s.complexity]+'">'+esc(s.name)+'</div>';}
-    if(ds.length>5)h+='<div style="font-size:8px;color:#6a5e52;text-align:center">+'+(ds.length-5)+'</div>';
+    if(ds.length>4)h+='<div style="font-size:8px;color:#6a5e52;text-align:center">+'+(ds.length-4)+'</div>';
     h+='</div>';
   }
   h+='</div><div class="stats">';
