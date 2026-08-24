@@ -176,16 +176,6 @@ button,input,textarea,select{font-family:inherit}
 .cat-row .cr-ren{border:1px solid #3a342e;background:none;color:#a09585}
 .cat-row .cr-del{border:1px solid rgba(201,64,64,.27);background:rgba(201,64,64,.07);color:#c94040}
 .cat-row .cr-up,.cat-row .cr-dn{border:1px solid #3a342e;background:none;color:#8a7e72;padding:2px 5px;font-size:9px}
-/* gate */
-.gate{position:fixed;inset:0;background:#141210;z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px}
-.gate .gbox{width:100%;max-width:330px;text-align:center}
-.gate h1{font-family:'EB Garamond',Georgia,serif;font-size:26px;color:#e8d5a0;font-weight:400;margin-bottom:4px}
-.gate .gsub{font-size:9px;color:#8a7e72;text-transform:uppercase;letter-spacing:2px;margin-bottom:22px}
-.gate input{width:100%;padding:11px 14px;border-radius:6px;border:1px solid #3a342e;background:#1a1714;color:#e8e0d6;font-size:14px;outline:none;text-align:center;letter-spacing:2px}
-.gate input:focus{border-color:#c49b2a66}
-.gate button{width:100%;margin-top:9px;padding:11px;border-radius:6px;border:none;background:#c49b2a;color:#1a1714;font-size:13px;font-weight:600;cursor:pointer}
-.gate .gerr{font-size:11px;color:#c94040;margin-top:9px;min-height:15px}
-
 /* ═══ SIDEBAR TOGGLE / DRAWER ═══ */
 .sb-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:790}
 .left{transition:transform .18s ease}
@@ -263,17 +253,6 @@ button,input,textarea,select{font-family:inherit}
 <body>
 <div class="toast" id="toast"></div>
 
-<div class="gate" id="gate" style="display:none">
-  <div class="gbox">
-    <h1>PROJECT HAIRPIN</h1>
-    <div class="gsub">Production Scheduler</div>
-    <input id="gateKey" type="password" placeholder="Access key" autocomplete="off"
-           onkeydown="if(event.key==='Enter')submitGate()">
-    <button onclick="submitGate()">Enter</button>
-    <div class="gerr" id="gateErr"></div>
-  </div>
-</div>
-
 <div class="header">
   <div><h1>PROJECT HAIRPIN</h1><div class="sub">Production Scheduler</div></div>
   <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -301,13 +280,12 @@ button,input,textarea,select{font-family:inherit}
 
    After redeploying Code.gs, paste the new /exec URL here and commit.
    ══════════════════════════════════════════════════════════════════════════ */
-var API_URL="https://script.google.com/macros/s/AKfycbz2Ug2lTInYtjrUN3E8hjMIRQ0HQamoxy1uCnVSReeL3K7jCSQOzhTBPdJt62aDSlhc/exec";
+var API_URL="https://script.google.com/macros/s/AKfycbzK5VuqwVeFMmHjjxNIEfDcILWMrxo9OIPzk7kCl6AbzI5PGOuGeMmS4oULr4etgfW8/exec";
 
 /* Columns the sheet lets us write. Everything else is read-only here and edited
    in the sheet, so a misclick can never overwrite your prose. */
 var RW_CATS={lighting:"LIGHTING",timeOfDay:"TIME OF DAY",weather:"WEATHER",status:"STATUS"};
 
-var accessKey="";
 var catList=[];        // [{key,label,color,options[],rw}]
 var scenes=[];         // every scene; s.shootDay is the schedule
 var days={};           // dateKey -> {label,call,wrap,notes}
@@ -377,7 +355,7 @@ function api(params){
     var t=setTimeout(function(){if(done)return;done=true;delete window[cb];if(sc.parentNode)sc.parentNode.removeChild(sc);resolve({error:"Timeout"})},25000);
     window[cb]=function(data){if(done)return;done=true;clearTimeout(t);delete window[cb];if(sc.parentNode)sc.parentNode.removeChild(sc);resolve(data)};
     sc.onerror=function(){if(done)return;done=true;clearTimeout(t);delete window[cb];if(sc.parentNode)sc.parentNode.removeChild(sc);resolve({error:"Network error"})};
-    sc.src=API_URL+"?"+params+"&key="+encodeURIComponent(accessKey)+"&callback="+cb;
+    sc.src=API_URL+"?"+params+"&callback="+cb;
     document.body.appendChild(sc);
   });
 }
@@ -395,32 +373,9 @@ function setLive(busy){
   if(busy||writesInFlight>0)b.classList.add("busy");else b.classList.remove("busy");
 }
 
-// ── ACCESS GATE ──────────────────────────────────────────────
-function showGate(msg){
-  document.getElementById("gate").style.display="flex";
-  document.getElementById("gateErr").textContent=msg||"";
-  var el=document.getElementById("gateKey");el.value="";setTimeout(function(){el.focus()},80);
-}
-function submitGate(){
-  var v=document.getElementById("gateKey").value.trim();
-  if(!v)return;
-  accessKey=v;
-  document.getElementById("gateErr").textContent="Checking...";
-  loadFromSheet().then(function(ok){
-    if(ok){
-      try{localStorage.setItem("hairpinKey",v)}catch(e){}
-      document.getElementById("gate").style.display="none";
-      startPolling();
-    }else{
-      showGate("That key didn't work.");
-    }
-  });
-}
-
 // ── LOAD ─────────────────────────────────────────────────────
 function loadFromSheet(quiet){
   return api("action=getAll").then(function(data){
-    if(data.error==="auth")return false;
     if(data.error){toast("Load failed: "+data.error,"err");render();return false}
 
     scenes=data.scenes||[];
@@ -1164,15 +1119,8 @@ function renameCat(idx){
 
 // ── BOOT ─────────────────────────────────────────────────────
 (function boot(){
-  var saved="";
-  try{saved=localStorage.getItem("hairpinKey")||""}catch(e){}
   render();
-  if(!saved){showGate();return}
-  accessKey=saved;
-  loadFromSheet().then(function(ok){
-    if(ok)startPolling();
-    else{try{localStorage.removeItem("hairpinKey")}catch(e){}showGate("Your saved key stopped working.")}
-  });
+  loadFromSheet().then(function(ok){ if(ok)startPolling() });
 })();
 </script>
 </body>
