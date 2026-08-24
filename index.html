@@ -280,7 +280,7 @@ button,input,textarea,select{font-family:inherit}
 
    After redeploying Code.gs, paste the new /exec URL here and commit.
    ══════════════════════════════════════════════════════════════════════════ */
-var API_URL="https://script.google.com/macros/s/AKfycbxd3cgHgfgvL2DkuxRAAnp8e9xbderlt379c4HDAivU8KAmamidgvlZkRw8M027YE4/exec";
+var API_URL="https://script.google.com/macros/s/AKfycbzK5VuqwVeFMmHjjxNIEfDcILWMrxo9OIPzk7kCl6AbzI5PGOuGeMmS4oULr4etgfW8/exec";
 
 /* Simple columns the app owns outright — written as a plain value. */
 var RW_CATS={lighting:"LIGHTING",timeOfDay:"TIME OF DAY",weather:"WEATHER",status:"STATUS"};
@@ -466,12 +466,21 @@ function saveDayMeta(k,d){
   return apiWrite({action:"saveDay",day:{date:k,label:d.label,call:d.call,wrap:d.wrap,notes:d.notes}})
     .then(function(r){if(r&&r.error)toast("Save failed: "+r.error,"err")});
 }
+/** Loose match, mirroring normKey() in the Apps Script. */
+function nk(s){
+  return String(s||"").toUpperCase().replace(/’/g,"'").replace(/\([^)]*\)/g," ")
+    .replace(/['.\-]/g,"").replace(/[^A-Z0-9 /&]/g," ").replace(/\s+/g," ").trim();
+}
+
 function saveRosters(){
-  var rows=[];
+  var rows=[],seen={};
   for(var i=0;i<catList.length;i++){
     var c=catList[i];
     for(var j=0;j<c.options.length;j++){
       var nm=c.options[j],m=(c.meta&&c.meta[nm])||{};
+      var k=c.key+"|"+nk(nm);
+      if(seen[k])continue;            // never write the same value twice
+      seen[k]=true;
       // aliases and notes ride along untouched — losing them would break the
       // consolidation that maps "MR. DRUMMOND" onto "Cobb/Drummond"
       rows.push([c.key,nm,m.color||c.color,(m.aliases||[]).join("; "),m.note||""]);
@@ -1051,7 +1060,7 @@ function renderSettings(){
   if(sMode==="options"&&catList[sTab]){
     var cat=catList[sTab];
     h+='<h3 style="font-family:EB Garamond,Georgia,serif;font-size:18px;color:#e8d5a0;font-weight:400;margin-bottom:6px">'+esc(cat.label)+'</h3>';
-    h+='<div style="font-size:10px;color:#8a7e72;margin-bottom:12px">These come from the <strong>Rosters</strong> tab. Merge a duplicate by moving its name into another row\'s Aliases column in the sheet.</div>';
+    h+='<div style="font-size:10px;color:#8a7e72;margin-bottom:12px;line-height:1.6">These come from the <strong>Rosters</strong> tab. Merge a duplicate by moving its name into another row\'s <strong>ALIASES</strong> column in the sheet.<br>For a clear-out, use <strong>Project Hairpin &rarr; Rosters: remove duplicates</strong> (or <strong>remove unused values</strong>) in the spreadsheet menu.</div>';
     h+='<div style="display:flex;gap:8px;margin-bottom:14px"><input id="set-new" placeholder="Add new '+esc(cat.label).toLowerCase()+' option..." style="flex:1;padding:7px 10px;border-radius:5px;border:1px solid #3a342e;background:#141210;color:#e8e0d6;font-size:13px;outline:none" onkeydown="if(event.key===\'Enter\')addOpt()"><button class="mbtn gold" style="padding:7px 14px" onclick="addOpt()">Add</button></div>';
     for(var i=0;i<cat.options.length;i++){
       var v=cat.options[i];
@@ -1122,7 +1131,12 @@ function addOpt(){
   var el=document.getElementById("set-new"),v=el.value.trim();
   if(!v)return;
   var cat=catList[sTab];
-  if(cat.options.indexOf(v)>=0)return;
+  for(var i=0;i<cat.options.length;i++){          // loose match, so "Rope" won't
+    if(nk(cat.options[i])===nk(v)){               // sit beside an existing "rope"
+      toast('"'+cat.options[i]+'" is already there',"info");
+      el.value="";return;
+    }
+  }
   cat.options.push(v);
   if(!cat.meta)cat.meta={};
   cat.meta[v]={color:"",note:"",aliases:[]};
@@ -1130,6 +1144,19 @@ function addOpt(){
 }
 function delOpt(idx){
   var cat=catList[sTab],nm=cat.options[idx];
+  // A value still written in a scene cell gets re-created on the next load, so
+  // deleting it here alone would look like the delete silently failed.
+  var users=[];
+  for(var i=0;i<scenes.length;i++){
+    if(scenes[i][cat.key]&&scenes[i][cat.key].indexOf(nm)>=0)users.push(scenes[i].seqLabel||scenes[i].seq);
+  }
+  if(users.length){
+    var list=users.slice(0,8).join(", ")+(users.length>8?" +"+(users.length-8)+" more":"");
+    if(!confirm('"'+nm+'" is still used by '+users.length+' scene'+(users.length===1?'':'s')+
+                ':\n\n'+list+
+                '\n\nDeleting it here will not stick — the sheet still has it, so it comes back on the next load.'+
+                '\n\nUntick it on those scenes first. Delete anyway?'))return;
+  }
   cat.options.splice(idx,1);
   if(cat.meta)delete cat.meta[nm];
   renderSettings();
