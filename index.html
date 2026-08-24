@@ -280,11 +280,16 @@ button,input,textarea,select{font-family:inherit}
 
    After redeploying Code.gs, paste the new /exec URL here and commit.
    ══════════════════════════════════════════════════════════════════════════ */
-var API_URL="https://script.google.com/macros/s/AKfycbz2RSAW1BwVTVQIUjCyVrvhHyoOXhAg290s89JoqI5vYZBf6HMsmx63Z4K2-7HAa4an/exec";
+var API_URL="https://script.google.com/macros/s/AKfycbxd3cgHgfgvL2DkuxRAAnp8e9xbderlt379c4HDAivU8KAmamidgvlZkRw8M027YE4/exec";
 
-/* Columns the sheet lets us write. Everything else is read-only here and edited
-   in the sheet, so a misclick can never overwrite your prose. */
+/* Simple columns the app owns outright — written as a plain value. */
 var RW_CATS={lighting:"LIGHTING",timeOfDay:"TIME OF DAY",weather:"WEATHER",status:"STATUS"};
+
+/* Categories that live in the sheet's prose columns. Editable here too, but the
+   script reconciles rather than overwrites: wording you wrote stays put, unticked
+   values are removed, and newly ticked ones are appended as plain names. */
+var RW_LISTS={cast:1,locations:1,props:1,extras:1,act:1,camera:1,lens:1};
+function isRW(k){return !!(RW_CATS[k]||RW_LISTS[k])}
 
 var catList=[];        // [{key,label,color,options[],rw}]
 var scenes=[];         // every scene; s.shootDay is the schedule
@@ -398,23 +403,33 @@ function loadFromSheet(quiet){
   });
 }
 
-/** catList is driven entirely by the Rosters tab. */
+/**
+ * catList is driven entirely by the Rosters tab.
+ *
+ * `options` is the plain list of names used for rendering. `meta` carries each
+ * name's aliases and note alongside it, so saving from Settings round-trips them
+ * instead of blanking columns D and E of the Rosters tab.
+ */
 function buildCatList(cats,order){
+  function pack(key,label,color){
+    var entries=cats[key]||[],opts=[],meta={};
+    for(var j=0;j<entries.length;j++){
+      opts.push(entries[j].name);
+      meta[entries[j].name]={color:entries[j].color||"",note:entries[j].note||"",
+                             aliases:entries[j].aliases||[]};
+    }
+    return {key:key,label:label,color:color,options:opts,meta:meta,rw:isRW(key)};
+  }
   var list=[];
   for(var i=0;i<order.length;i++){
-    var o=order[i],entries=cats[o.key]||[];
-    var opts=[];
-    for(var j=0;j<entries.length;j++)opts.push(entries[j].name);
-    list.push({key:o.key,label:o.label||o.key,color:o.color||"#c49b2a",options:opts,rw:!!RW_CATS[o.key]});
+    var o=order[i];
+    list.push(pack(o.key,o.label||o.key,o.color||"#c49b2a"));
   }
   // any roster category not named in _order still shows up
   for(var k in cats){
     var found=false;
     for(var i=0;i<list.length;i++){if(list[i].key===k){found=true;break}}
-    if(!found){
-      var opts2=[];for(var j=0;j<cats[k].length;j++)opts2.push(cats[k][j].name);
-      list.push({key:k,label:k,color:"#8a7e72",options:opts2,rw:!!RW_CATS[k]});
-    }
+    if(!found)list.push(pack(k,k,"#8a7e72"));
   }
   catList=list;
 }
@@ -442,8 +457,9 @@ function saveShootDay(uid,date){
     if(r&&r.error)toast("Save failed: "+r.error,"err");
   });
 }
-function saveSceneFields(s,fields){
-  return apiWrite({action:"saveScene",scene:{uid:s.uid,seqLabel:s.seqLabel,title:s.title,fields:fields}})
+function saveSceneFields(s,fields,lists){
+  return apiWrite({action:"saveScene",scene:{uid:s.uid,seqLabel:s.seqLabel,title:s.title,
+                                             fields:fields,lists:lists||null}})
     .then(function(r){if(r&&r.error)toast("Save failed: "+r.error,"err")});
 }
 function saveDayMeta(k,d){
@@ -454,7 +470,12 @@ function saveRosters(){
   var rows=[];
   for(var i=0;i<catList.length;i++){
     var c=catList[i];
-    for(var j=0;j<c.options.length;j++)rows.push([c.key,c.options[j],c.color,"",""]);
+    for(var j=0;j<c.options.length;j++){
+      var nm=c.options[j],m=(c.meta&&c.meta[nm])||{};
+      // aliases and notes ride along untouched — losing them would break the
+      // consolidation that maps "MR. DRUMMOND" onto "Cobb/Drummond"
+      rows.push([c.key,nm,m.color||c.color,(m.aliases||[]).join("; "),m.note||""]);
+    }
   }
   return apiWrite({action:"saveRosters",rows:rows}).then(function(r){
     if(r&&r.error)toast("Settings save failed: "+r.error,"err");else toast("Settings saved","ok");
@@ -941,6 +962,9 @@ function renderEditor(isNew){
   for(var n=1;n<=5;n++)h+='<button class="cx-btn" onclick="setCx('+n+')" style="border:'+(s.complexity===n?'2px solid '+CC[n]:'1px solid #3a342e')+';background:'+(s.complexity===n?CC[n]+'33':'#1a1714')+';color:'+(s.complexity===n?CC[n]:'#8a7e72')+'">'+CL[n]+'</button>';
   h+='</div></div>';
 
+  h+='<div style="font-size:10px;color:#6a5e52;line-height:1.6;margin:2px 0 12px;padding:7px 9px;background:#141210;border:1px solid #2a2520;border-radius:5px">';
+  h+='Ticking these writes back to the sheet. Wording you already wrote is kept &mdash; a row reading <em style="color:#8a7e72">TOM (post-jump)</em> stays exactly that while Tom is ticked. Untick to remove; newly ticked names are added plainly for you to reword in the sheet.</div>';
+
   for(var ci=0;ci<catList.length;ci++){
     var cat=catList[ci];
     if(!cat.options.length)continue;
@@ -998,8 +1022,12 @@ function saveEdit(){
   var fields={"SHOOTING DAY":s.shootDay||"","COMPLEXITY":s.complexity,"SCHED NOTES":s.notes||""};
   for(var key in RW_CATS)fields[RW_CATS[key]]=s[key]||[];
 
+  // prose-column categories go over separately so the script can reconcile them
+  var lists={};
+  for(var lk in RW_LISTS)lists[lk]=s[lk]||[];
+
   closeModal();render();if(selDay)renderDayPanel(selDay);
-  saveSceneFields(s,fields).then(function(){toast("Scene saved","ok")});
+  saveSceneFields(s,fields,lists).then(function(){toast("Scene saved","ok")});
 }
 function closeModal(){document.getElementById("modalMount").innerHTML=""}
 
@@ -1034,7 +1062,11 @@ function renderSettings(){
         h+='<button class="mbtn ghost" style="padding:3px 6px;font-size:10px" onclick="sRen=null;renderSettings()">Esc</button>';
       }else{
         var cnt=0;for(var j=0;j<scenes.length;j++){if(scenes[j][cat.key]&&scenes[j][cat.key].indexOf(v)>=0)cnt++}
-        h+='<span class="cr-name">'+esc(v)+'</span><span class="cr-count">'+cnt+'&times;</span>';
+        var m=(cat.meta&&cat.meta[v])||{},na=(m.aliases||[]).length;
+        h+='<span class="cr-name">'+esc(v)+
+           (na?' <span style="color:#5a5248;font-size:9px" title="'+esc((m.aliases||[]).join(" · "))+'">+'+na+' alias'+(na===1?'':'es')+'</span>':'')+
+           (m.note?' <span style="color:#5a5248;font-size:9px">'+esc(m.note)+'</span>':'')+'</span>';
+        h+='<span class="cr-count">'+cnt+'&times;</span>';
         if(i>0)h+='<button class="cat-row cr-up" onclick="moveOpt('+i+',-1)">&#9650;</button>';
         if(i<cat.options.length-1)h+='<button class="cat-row cr-dn" onclick="moveOpt('+i+',1)">&#9660;</button>';
         h+='<button class="cat-row cr-ren" onclick="sRen='+i+';sRenVal=catList[sTab].options['+i+'];renderSettings()">Rename</button>';
@@ -1073,8 +1105,9 @@ function renderSettings(){
     h+='<h3 style="font-family:EB Garamond,Georgia,serif;font-size:18px;color:#e8d5a0;font-weight:400;margin-bottom:14px">About</h3>';
     h+='<div style="font-size:11px;color:#a09585;line-height:1.8">';
     h+='The <strong>Sequences</strong> tab of the production document is the database. Each scene row carries its own <strong>SHOOTING DAY</strong>, so a scene can only ever be in one place.<br><br>';
-    h+='Editable here: <strong>Shoot Day, Complexity, Time of Day, Lighting, Weather, Status, Notes</strong>.<br>';
-    h+='Everything else &mdash; summaries, sluglines, cast, locations, props, wardrobe, hair &amp; makeup, stunts, VFX &mdash; is edited in the sheet and shown here read-only.<br><br>';
+    h+='Editable here: <strong>Shoot Day, Complexity, Cast, Locations, Props, Extras, Act, Camera, Lens, Time of Day, Lighting, Weather, Status, Notes</strong>.<br>';
+    h+='The prose columns reconcile rather than overwrite &mdash; your own wording survives being edited from the app.<br><br>';
+    h+='Read-only here, edited in the sheet: <strong>summaries, sluglines, addresses, wardrobe, hair &amp; makeup, stunts, VFX</strong>.<br><br>';
     h+='Lists in the sheet split on a <strong>semicolon or a line break</strong>, never a comma.<br><br>';
     h+='<span style="color:#6a5e52">Scenes: '+scenes.length+' &middot; shoot days: '+shootDates().length+' &middot; revision: '+rev+'</span>';
     h+='</div>';
@@ -1085,14 +1118,33 @@ function renderSettings(){
   if(sRen!==null){var el=document.getElementById("set-ren")||document.getElementById("cat-ren-label");if(el)el.focus()}
 }
 
-function addOpt(){var el=document.getElementById("set-new");var v=el.value.trim();if(!v)return;var cat=catList[sTab];if(cat.options.indexOf(v)>=0)return;cat.options.push(v);el.value="";renderSettings()}
-function delOpt(idx){catList[sTab].options.splice(idx,1);renderSettings()}
+function addOpt(){
+  var el=document.getElementById("set-new"),v=el.value.trim();
+  if(!v)return;
+  var cat=catList[sTab];
+  if(cat.options.indexOf(v)>=0)return;
+  cat.options.push(v);
+  if(!cat.meta)cat.meta={};
+  cat.meta[v]={color:"",note:"",aliases:[]};
+  el.value="";renderSettings();
+}
+function delOpt(idx){
+  var cat=catList[sTab],nm=cat.options[idx];
+  cat.options.splice(idx,1);
+  if(cat.meta)delete cat.meta[nm];
+  renderSettings();
+}
 function moveOpt(idx,dir){var o=catList[sTab].options;var t=o[idx];o[idx]=o[idx+dir];o[idx+dir]=t;renderSettings()}
 function renameOpt(idx){
   var nw=document.getElementById("set-ren").value.trim(),old=catList[sTab].options[idx];
   if(!nw||nw===old){sRen=null;renderSettings();return}
-  catList[sTab].options[idx]=nw;
-  var ck=catList[sTab].key;
+  var cat=catList[sTab];
+  cat.options[idx]=nw;
+  if(cat.meta){                      // carry aliases and the note onto the new name
+    cat.meta[nw]=cat.meta[old]||{color:"",note:"",aliases:[]};
+    if(old!==nw)delete cat.meta[old];
+  }
+  var ck=cat.key;
   for(var i=0;i<scenes.length;i++){if(scenes[i][ck])for(var j=0;j<scenes[i][ck].length;j++){if(scenes[i][ck][j]===old)scenes[i][ck][j]=nw}}
   sRen=null;renderSettings();
 }
@@ -1102,7 +1154,7 @@ function addCategory(){
   var color=document.getElementById("cat-new-color").value.trim()||"#c49b2a";
   if(!key||!label)return;
   for(var i=0;i<catList.length;i++){if(catList[i].key===key){toast("Key already exists","err");return}}
-  catList.push({key:key,label:label,color:color,options:[],rw:!!RW_CATS[key]});
+  catList.push({key:key,label:label,color:color,options:[],rw:isRW(key)});
   renderSettings();
 }
 function delCategory(idx){
