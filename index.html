@@ -751,7 +751,10 @@ function renderDayPanel(day){
         var ck=catList[ci].key;
         if(!dpAvail[ck])continue;
         var pos=dpAvail[ck].pos,neg=dpAvail[ck].neg,sv=s[ck]||[];
-        if(pos.length>0){var found=false;for(var j=0;j<sv.length;j++){if(pos.indexOf(sv[j])>=0){found=true;break}}if(!found){ok=false;break}}
+        // include = AND: every ticked value must be on the scene, matching the
+        // highlight bar. Tom + Rhodes means scenes with both, not either.
+        if(pos.length>0){for(var j=0;j<pos.length;j++){if(sv.indexOf(pos[j])<0){ok=false;break}}if(!ok)break}
+        // exclude = the scene must have none of these
         if(neg.length>0){for(var j=0;j<sv.length;j++){if(neg.indexOf(sv[j])>=0){ok=false;break}}if(!ok)break}
       }
       if(ok)matches.push(s);
@@ -869,7 +872,7 @@ function renderDayPanel(day){
 
   // Resource filter
   h+='<div class="res-box"><div class="rb-title">What do you have this day?</div>';
-  h+='<div class="rb-hint">Click = available (include). Click again = exclude (red). Click again = off.</div>';
+  h+='<div class="rb-hint">Click = must have (gold). Click again = must not have (red). Click again = off.<br>Picking Tom and Rhodes finds scenes with <strong>both</strong>, not either.</div>';
   for(var ci=0;ci<catList.length;ci++){
     var cat=catList[ci];
     if(!cat.options.length)continue;
