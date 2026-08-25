@@ -257,9 +257,10 @@ button,input,textarea,select{font-family:inherit}
   <div><h1>PROJECT HAIRPIN</h1><div class="sub">Production Scheduler</div></div>
   <div style="display:flex;gap:6px;flex-wrap:wrap">
     <button class="hbtn live" id="liveBtn" onclick="refreshNow()" title="Refresh from the sheet">&#8635; Live</button>
+    <button class="hbtn" id="lockBtn" onclick="toggleLock()" title="Click to enter the edit code">&#128274; View only</button>
     <button class="hbtn gold" id="sbToggle" onclick="toggleSidebar()">&#9776; Scenes</button>
     <button class="hbtn" onclick="openSettings()">&#9881; Settings</button>
-    <button class="hbtn gold" onclick="openEditor(null)">+ New Scene</button>
+    <button class="hbtn gold" id="newSceneBtn" style="display:none" onclick="openEditor(null)">+ New Scene</button>
   </div>
 </div>
 <div class="sb-backdrop" id="sbBackdrop" onclick="toggleSidebar()"></div>
@@ -269,6 +270,7 @@ button,input,textarea,select{font-family:inherit}
   <div id="dayPanelMount"></div>
 </div>
 <div id="modalMount"></div>
+<div id="lockMount"></div>
 
 <script>
 /* ══════════════════════════════════════════════════════════════════════════
@@ -280,7 +282,7 @@ button,input,textarea,select{font-family:inherit}
 
    After redeploying Code.gs, paste the new /exec URL here and commit.
    ══════════════════════════════════════════════════════════════════════════ */
-var API_URL="https://script.google.com/macros/s/AKfycbz0Z1vQCTm5YC5AB3J8duTtZFqXwn2JVimM0esTj6mtU2u5vwSdZj9geenhGNa4zajx/exec";
+var API_URL="https://script.google.com/macros/s/AKfycbzHkBZuvRK3Ng3zoDdsZycj_Qr_O2c0NViu-iNLcB7TtOfwicwBtrRj9vvM2FXvt0TV/exec";
 
 /* Simple columns the app owns outright — written as a plain value. */
 var RW_CATS={lighting:"LIGHTING",timeOfDay:"TIME OF DAY",weather:"WEATHER",status:"STATUS"};
@@ -290,6 +292,11 @@ var RW_CATS={lighting:"LIGHTING",timeOfDay:"TIME OF DAY",weather:"WEATHER",statu
    values are removed, and newly ticked ones are appended as plain names. */
 var RW_LISTS={cast:1,locations:1,props:1,extras:1,act:1,camera:1,lens:1};
 function isRW(k){return !!(RW_CATS[k]||RW_LISTS[k])}
+
+/* Editing is locked until you enter the code. It is never stored in this file —
+   you type it, it lives in this browser only, and it rides along on writes. */
+var editKey="";
+function canEdit(){return !!editKey}
 
 var catList=[];        // [{key,label,color,options[],rw}]
 var scenes=[];         // every scene; s.shootDay is the schedule
@@ -366,13 +373,96 @@ function api(params){
   });
 }
 function apiWrite(p){
+  if(!canEdit()){
+    toast("Editing is locked — tap the lock to unlock","err");
+    promptEditKey();
+    return Promise.resolve({error:"locked"});
+  }
   writesInFlight++;setLive(true);
-  return api("payload="+encodeURIComponent(JSON.stringify(p))).then(function(r){
-    writesInFlight--;setLive(false);
-    if(r&&r.rev!==undefined)rev=r.rev;      // our own write — don't refetch over it
-    if(refetchQueued&&!writesInFlight){refetchQueued=false;loadFromSheet(true)}
-    return r;
+  return api("payload="+encodeURIComponent(JSON.stringify(p))+"&key="+encodeURIComponent(editKey))
+    .then(function(r){
+      writesInFlight--;setLive(false);
+      if(r&&r.error==="locked"){          // key rejected — drop it and re-ask
+        editKey="";try{localStorage.removeItem("hairpinEditKey")}catch(e){}
+        applyLock();loadFromSheet(true);
+        renderLockModal("That code wasn't right.");
+        return r;
+      }
+      if(r&&r.rev!==undefined)rev=r.rev;  // our own write — don't refetch over it
+      if(refetchQueued&&!writesInFlight){refetchQueued=false;loadFromSheet(true)}
+      return r;
+    });
+}
+
+// ── LOCK ─────────────────────────────────────────────────────
+/* Built as a real in-page dialog rather than window.prompt(), which several
+   browsers — most mobile ones — refuse to show at all. */
+var afterUnlock=null;
+
+function promptEditKey(after){
+  afterUnlock=after||null;
+  renderLockModal("");
+}
+function renderLockModal(err,busy,keep){
+  var h='<div class="modal-bg" style="z-index:1500" onclick="closeLockModal()">';
+  h+='<div class="modal" style="max-width:330px" onclick="event.stopPropagation()">';
+  h+='<h2 style="border:none;padding:0;margin-bottom:5px">Unlock editing</h2>';
+  h+='<div style="font-size:11px;color:#8a7e72;margin-bottom:14px;line-height:1.6">The schedule stays readable for everyone. The code is only needed to change it.</div>';
+  h+='<input id="lk-key" type="password" placeholder="Edit code" autocomplete="off" value="'+esc(keep||"")+'"'+
+     (busy?' disabled':'')+' style="text-align:center;letter-spacing:3px" onkeydown="if(event.key===\'Enter\')submitEditKey()">';
+  h+='<div style="font-size:11px;margin-top:8px;min-height:15px;color:'+(busy?'#8a7e72':'#c94040')+'">'+
+     (busy?'Checking&hellip;':(err?esc(err):''))+'</div>';
+  h+='<div style="display:flex;gap:8px;margin-top:8px">';
+  h+='<button class="mbtn gold" style="flex:1"'+(busy?' disabled':'')+' onclick="submitEditKey()">Unlock</button>';
+  h+='<button class="mbtn ghost" onclick="closeLockModal()">Cancel</button></div>';
+  h+='</div></div>';
+  document.getElementById("lockMount").innerHTML=h;
+  var el=document.getElementById("lk-key");
+  if(el&&!busy)setTimeout(function(){el.focus();el.select()},60);
+}
+function closeLockModal(){
+  document.getElementById("lockMount").innerHTML="";
+  afterUnlock=null;
+}
+/* Checks the code with the sheet before unlocking, so a wrong one is rejected
+   here rather than silently failing on the first edit you try to make. */
+function submitEditKey(){
+  var el=document.getElementById("lk-key");
+  var v=el?el.value.trim():"";
+  if(!v)return;
+  renderLockModal("",true,v);
+  api("action=verify&key="+encodeURIComponent(v)).then(function(r){
+    if(!r||r.error){renderLockModal("Couldn't reach the sheet — try again.",false,v);return}
+    if(!r.ok){renderLockModal("That code isn't right.",false,"");return}
+    editKey=v;
+    try{localStorage.setItem("hairpinEditKey",v)}catch(e){}
+    var next=afterUnlock;
+    document.getElementById("lockMount").innerHTML="";
+    afterUnlock=null;
+    applyLock();render();
+    toast("Editing unlocked","ok");
+    if(next)next();
   });
+}
+function unlockThenEditor(){promptEditKey(function(){renderEditor(!!(window._ed&&window._ed._new))})}
+function unlockThenSettings(){promptEditKey(function(){renderSettings()})}
+
+function toggleLock(){
+  if(canEdit()){
+    editKey="";
+    try{localStorage.removeItem("hairpinEditKey")}catch(e){}
+    applyLock();render();
+    toast("Back to view only","info");
+  }else promptEditKey();
+}
+function applyLock(){
+  var b=document.getElementById("lockBtn"),n=document.getElementById("newSceneBtn");
+  if(b){
+    b.innerHTML=canEdit()?"&#128275; Editing":"&#128274; View only";
+    b.className="hbtn"+(canEdit()?" gold":"");
+    b.title=canEdit()?"Click to return to view only":"Click to enter the edit code";
+  }
+  if(n)n.style.display=canEdit()?"":"none";
 }
 function setLive(busy){
   var b=document.getElementById("liveBtn");if(!b)return;
@@ -525,7 +615,7 @@ function sortFn(mode){
 function chipHTML(s,dateLabel){
   var cls="chip";
   if(hlActive())cls+=hlMatch(s)?" hl-on":" hl-off";
-  var h='<div class="'+cls+'" draggable="true" ondragstart="startDrag(\''+s.uid+'\')" onclick="openEditor(\''+s.uid+'\')" style="background:linear-gradient(135deg,'+CC[s.complexity]+'22,'+CC[s.complexity]+'11);border:1.5px solid '+CC[s.complexity]+'55;border-left:4px solid '+CC[s.complexity]+'">';
+  var h='<div class="'+cls+'" draggable="'+(canEdit()?'true':'false')+'" ondragstart="startDrag(\''+s.uid+'\')" onclick="openEditor(\''+s.uid+'\')" style="background:linear-gradient(135deg,'+CC[s.complexity]+'22,'+CC[s.complexity]+'11);border:1.5px solid '+CC[s.complexity]+'55;border-left:4px solid '+CC[s.complexity]+'">';
   h+='<div class="name">'+(dateLabel?'<span class="cdate">'+dateLabel+'</span>':'')+esc(s.name)+'</div><div class="tags">';
   for(var j=0;j<(s.cast||[]).length;j++)h+='<span>'+esc(s.cast[j])+'</span>';
   for(var j=0;j<(s.timeOfDay||[]).length;j++)h+='<span class="tod">'+esc(s.timeOfDay[j])+'</span>';
@@ -694,7 +784,7 @@ function renderCal(){
     for(var j=0;j<Math.min(ds.length,4);j++){
       var s=ds[j],mc="mini-chip";
       if(HLON)mc+=hlMatch(s)?" hl-on":" hl-off";
-      h+='<div class="'+mc+'" draggable="true" ondragstart="event.stopPropagation();startDrag(\''+s.uid+'\')" style="background:'+CC[s.complexity]+'22;border-left:2px solid '+CC[s.complexity]+';color:'+CC[s.complexity]+'">'+esc(s.name)+'</div>';
+      h+='<div class="'+mc+'" draggable="'+(canEdit()?'true':'false')+'" ondragstart="event.stopPropagation();startDrag(\''+s.uid+'\')" style="background:'+CC[s.complexity]+'22;border-left:2px solid '+CC[s.complexity]+';color:'+CC[s.complexity]+'">'+esc(s.name)+'</div>';
     }
     if(ds.length>4)h+='<div style="font-size:8px;color:#6a5e52;text-align:center">+'+(ds.length-4)+'</div>';
     if(ds.length&&dayUnlocked(ds))h+='<div class="warn" title="A location on this day is not confirmed">&#9888;</div>';
@@ -786,7 +876,8 @@ function renderDayPanel(day){
     h+='<input id="dp-label" placeholder="Day label (e.g. Winery Night 1)" value="'+esc(meta.label)+'" style="flex:1;padding:6px 9px;border-radius:5px;border:1px solid #3a342e;background:#141210;color:#e8e0d6;font-size:12px;outline:none">';
     h+='<input id="dp-call" placeholder="Call" value="'+esc(meta.call)+'" style="width:64px;padding:6px;border-radius:5px;border:1px solid #3a342e;background:#141210;color:#e8e0d6;font-size:12px;outline:none;text-align:center">';
     h+='<input id="dp-wrap" placeholder="Wrap" value="'+esc(meta.wrap)+'" style="width:64px;padding:6px;border-radius:5px;border:1px solid #3a342e;background:#141210;color:#e8e0d6;font-size:12px;outline:none;text-align:center">';
-    h+='<button class="mbtn gold" style="padding:6px 12px;font-size:11px" onclick="saveDayEdits(\''+k+'\')">Save</button></div>';
+    if(canEdit())h+='<button class="mbtn gold" style="padding:6px 12px;font-size:11px" onclick="saveDayEdits(\''+k+'\')">Save</button>';
+    h+='</div>';
     if(cams.length)h+='<div style="font-size:10px;color:#8a7e72;margin-bottom:4px">Camera: <span style="color:#c9b896">'+esc(cams.join(", "))+'</span> &nbsp;·&nbsp; Lens: <span style="color:#c9b896">'+esc(lenses.join(", "))+'</span></div>';
 
     // Locations with address + lock status
@@ -844,8 +935,9 @@ function renderDayPanel(day){
           h+='<div class="sc-dept"><div class="dl">'+dept[d2][0]+'</div><div class="dv">'+esc(dept[d2][1].join(" · "))+'</div></div>';
         }
         h+='<div style="display:flex;gap:5px;margin-top:10px">';
-        h+='<button class="mbtn ghost" style="padding:4px 10px;font-size:10px" onclick="event.stopPropagation();openEditor(\''+s.uid+'\')">Edit scheduling</button>';
-        h+='<button class="mbtn red" style="padding:4px 10px;font-size:10px" onclick="event.stopPropagation();unschedule(\''+s.uid+'\')">Unschedule</button></div>';
+        h+='<button class="mbtn ghost" style="padding:4px 10px;font-size:10px" onclick="event.stopPropagation();openEditor(\''+s.uid+'\')">'+(canEdit()?'Edit scheduling':'Open scene')+'</button>';
+        if(canEdit())h+='<button class="mbtn red" style="padding:4px 10px;font-size:10px" onclick="event.stopPropagation();unschedule(\''+s.uid+'\')">Unschedule</button>';
+        h+='</div>';
         h+='</div>';
       }
       h+='</div>';
@@ -865,8 +957,8 @@ function renderDayPanel(day){
     }
 
     h+='<div class="dp-section">Day Notes</div>';
-    h+='<textarea id="dp-notes" rows="2" placeholder="Generator on site, contract signed..." style="width:100%;padding:7px 9px;border-radius:5px;border:1px solid #3a342e;background:#141210;color:#e8e0d6;font-size:11px;outline:none;resize:vertical">'+esc(meta.notes)+'</textarea>';
-    h+='<button class="mbtn ghost" style="margin-top:5px;padding:5px 12px;font-size:11px" onclick="saveDayEdits(\''+k+'\')">Save notes</button>';
+    h+='<textarea id="dp-notes" rows="2" placeholder="Generator on site, contract signed..."'+(canEdit()?'':' readonly')+' style="width:100%;padding:7px 9px;border-radius:5px;border:1px solid #3a342e;background:#141210;color:#e8e0d6;font-size:11px;outline:none;resize:vertical">'+esc(meta.notes)+'</textarea>';
+    if(canEdit())h+='<button class="mbtn ghost" style="margin-top:5px;padding:5px 12px;font-size:11px" onclick="saveDayEdits(\''+k+'\')">Save notes</button>';
     h+='<div style="height:18px"></div>';
   }
 
@@ -895,7 +987,7 @@ function renderDayPanel(day){
     if(!matches.length)h+='<div style="font-size:11px;color:#5a5248;text-align:center;padding:12px">No unscheduled scenes match</div>';
     for(var i=0;i<matches.length;i++){
       var s=matches[i];
-      h+='<div class="match-item"><div class="mi-info" onclick="openEditor(\''+s.uid+'\')" style="background:'+CC[s.complexity]+'15;border:1px solid '+CC[s.complexity]+'44;border-left:3px solid '+CC[s.complexity]+'"><div class="mi-name">'+esc(s.name)+'</div><div class="mi-meta">'+esc((s.cast||[]).join(", "))+' &middot; '+esc((s.locations||[]).join(", "))+'</div></div><button class="mi-add" onclick="addToDay(\''+s.uid+'\','+day+')">+ Add</button></div>';
+      h+='<div class="match-item"><div class="mi-info" onclick="openEditor(\''+s.uid+'\')" style="background:'+CC[s.complexity]+'15;border:1px solid '+CC[s.complexity]+'44;border-left:3px solid '+CC[s.complexity]+'"><div class="mi-name">'+esc(s.name)+'</div><div class="mi-meta">'+esc((s.cast||[]).join(", "))+' &middot; '+esc((s.locations||[]).join(", "))+'</div></div>'+(canEdit()?'<button class="mi-add" onclick="addToDay(\''+s.uid+'\','+day+')">+ Add</button>':'')+'</div>';
     }
   }else{
     h+='<div style="font-size:11px;color:#5a5248;text-align:center;padding:16px">Toggle resources above to find matching scenes</div>';
@@ -942,6 +1034,7 @@ function dropOnDay(e,day){
   e.preventDefault();
   if(!dragId)return;
   var uid=dragId;dragId=null;
+  if(!canEdit()){toast("Editing is locked","err");return}
   setDay(uid,dkey(day));
 }
 
@@ -1012,8 +1105,10 @@ function renderEditor(isNew){
 
   h+='<div class="field"><label>Scheduling Notes</label><textarea id="ed-notes" rows="3" onchange="window._ed.notes=this.value">'+esc(s.notes||"")+'</textarea></div>';
   h+='<div style="display:flex;justify-content:space-between;margin-top:8px"><div style="display:flex;gap:8px">';
-  h+='<button class="mbtn gold" onclick="saveEdit()">Save</button><button class="mbtn ghost" onclick="closeModal()">Cancel</button></div>';
-  if(!isNew){
+  if(canEdit())h+='<button class="mbtn gold" onclick="saveEdit()">Save</button>';
+  else h+='<button class="mbtn gold" onclick="unlockThenEditor()">&#128274; Unlock to edit</button>';
+  h+='<button class="mbtn ghost" onclick="closeModal()">Close</button></div>';
+  if(!isNew&&canEdit()){
     h+='<div style="display:flex;gap:6px">';
     if(s.shootDay)h+='<button class="mbtn ghost" onclick="unschedule(\''+s.uid+'\');closeModal()">Unschedule</button>';
     h+='<button class="mbtn red" onclick="deleteScene(\''+s.uid+'\')">Delete</button></div>';
@@ -1096,7 +1191,8 @@ function renderSettings(){
   h+='<div style="border-top:1px solid #3a342e;margin:12px 0"></div>';
   h+='<div class="sn-item'+(sMode==="categories"?' active':'')+'" style="font-weight:600" onclick="sMode=\'categories\';sRen=null;renderSettings()">Manage Categories</div>';
   h+='<div class="sn-item'+(sMode==="about"?' active':'')+'" onclick="sMode=\'about\';renderSettings()">About</div>';
-  h+='<div class="sn-item" style="color:#4a9e6e;font-weight:600" onclick="saveRosters()">Save to Rosters</div>';
+  if(canEdit())h+='<div class="sn-item" style="color:#4a9e6e;font-weight:600" onclick="saveRosters()">Save to Rosters</div>';
+  else h+='<div class="sn-item" style="color:#8a7e72" onclick="unlockThenSettings()">&#128274; Unlock to edit</div>';
   h+='<div class="sn-item" style="color:#c94040" onclick="closeModal()">Close</div></div>';
   h+='<div class="settings-body">';
 
@@ -1241,6 +1337,8 @@ function renameCat(idx){
 
 // ── BOOT ─────────────────────────────────────────────────────
 (function boot(){
+  try{editKey=localStorage.getItem("hairpinEditKey")||""}catch(e){}
+  applyLock();
   render();
   loadFromSheet().then(function(ok){ if(ok)startPolling() });
 })();
