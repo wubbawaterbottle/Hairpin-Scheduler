@@ -280,7 +280,7 @@ button,input,textarea,select{font-family:inherit}
 
    After redeploying Code.gs, paste the new /exec URL here and commit.
    ══════════════════════════════════════════════════════════════════════════ */
-var API_URL="https://script.google.com/macros/s/AKfycbzPaAa6pKBqS31UdOUPNN3dDGarSywyZ0sBY5TuiG4RYNF7LPGgXoZNxCwPC7xY4AcH/exec";
+var API_URL="https://script.google.com/macros/s/AKfycbz0Z1vQCTm5YC5AB3J8duTtZFqXwn2JVimM0esTj6mtU2u5vwSdZj9geenhGNa4zajx/exec";
 
 /* Simple columns the app owns outright — written as a plain value. */
 var RW_CATS={lighting:"LIGHTING",timeOfDay:"TIME OF DAY",weather:"WEATHER",status:"STATUS"};
@@ -307,6 +307,7 @@ var sidebarOpen=false;
 var highlight={};
 var hlOpen=true;
 var openScene={};      // uid -> expanded on the call sheet
+var edDetail=false;    // detailed summary expanded in the scene editor
 
 var CC={1:"#4a9e6e",2:"#6b9e4a",3:"#c49b2a",4:"#d4772a",5:"#c94040"};
 var CL={1:"Simple",2:"Easy",3:"Medium",4:"Hard",5:"Major"};
@@ -948,6 +949,7 @@ function openEditor(uid){
     ? {uid:"s"+Date.now(),seqLabel:"",title:"",complexity:3,notes:"",shootDay:"",dayOrder:null,raw:{},_new:true}
     : JSON.parse(JSON.stringify(getScene(uid)));
   for(var i=0;i<catList.length;i++){if(!s[catList[i].key])s[catList[i].key]=[]}
+  edDetail=false;
   window._ed=s;renderEditor(isNew);
 }
 function renderEditor(isNew){
@@ -962,6 +964,18 @@ function renderEditor(isNew){
   }else if(s.slugline){
     h+='<div style="font-size:11px;color:#7a6e62;font-style:italic;margin-bottom:12px">'+esc(s.slugline)+
        (s.length?' &nbsp;·&nbsp; '+esc(s.length):'')+'</div>';
+  }
+
+  h+='<div class="field"><label>Short Summary</label>';
+  h+='<textarea id="ed-short" rows="2" placeholder="One line on what happens in this scene" onchange="window._ed.shortSummary=this.value">'+esc(s.shortSummary||"")+'</textarea>';
+  h+='<div class="ro-note">Column C of the Sequences tab.</div></div>';
+
+  if(s.detail){
+    h+='<div class="field"><label>Detailed Summary <span style="color:#5a5248;text-transform:none;letter-spacing:0">— from the sheet</span></label>';
+    h+='<div style="font-size:11px;line-height:1.75;color:#a09585;background:#141210;border:1px solid #2a2520;border-radius:5px;padding:9px 11px;cursor:pointer;'+
+       (edDetail?'':'max-height:56px;overflow:hidden;-webkit-mask-image:linear-gradient(#000 60%,transparent)')+
+       '" onclick="edDetail=!edDetail;renderEditor('+(isNew?'true':'false')+')">'+esc(s.detail)+'</div>';
+    h+='<div class="ro-note">'+(edDetail?'Click to collapse':'Click to read the whole thing')+'</div></div>';
   }
 
   h+='<div class="field"><label>Shoot Day</label><input type="date" id="ed-day" value="'+esc(s.shootDay||"")+'" onchange="window._ed.shootDay=this.value">';
@@ -996,7 +1010,11 @@ function renderEditor(isNew){
   h+='<div class="field"><label>Scheduling Notes</label><textarea id="ed-notes" rows="3" onchange="window._ed.notes=this.value">'+esc(s.notes||"")+'</textarea></div>';
   h+='<div style="display:flex;justify-content:space-between;margin-top:8px"><div style="display:flex;gap:8px">';
   h+='<button class="mbtn gold" onclick="saveEdit()">Save</button><button class="mbtn ghost" onclick="closeModal()">Cancel</button></div>';
-  if(!isNew&&s.shootDay)h+='<button class="mbtn red" onclick="unschedule(\''+s.uid+'\');closeModal()">Unschedule</button>';
+  if(!isNew){
+    h+='<div style="display:flex;gap:6px">';
+    if(s.shootDay)h+='<button class="mbtn ghost" onclick="unschedule(\''+s.uid+'\');closeModal()">Unschedule</button>';
+    h+='<button class="mbtn red" onclick="deleteScene(\''+s.uid+'\')">Delete</button></div>';
+  }
   h+='</div></div></div>';
   document.getElementById("modalMount").innerHTML=h;
 }
@@ -1014,6 +1032,7 @@ function saveEdit(){
   var s=window._ed;
   var dayEl=document.getElementById("ed-day");if(dayEl)s.shootDay=dayEl.value;
   var nEl=document.getElementById("ed-notes");if(nEl)s.notes=nEl.value;
+  var shEl=document.getElementById("ed-short");if(shEl)s.shortSummary=shEl.value;
   if(s._new){
     var sq=document.getElementById("ed-seq"),ti=document.getElementById("ed-title");
     if(sq)s.seqLabel=normalizeSeq(sq.value);if(ti)s.title=ti.value;
@@ -1028,7 +1047,8 @@ function saveEdit(){
     for(var i=0;i<scenes.length;i++){if(scenes[i].uid===s.uid){s.name=(s.seqLabel?s.seqLabel+" — ":"")+s.title;scenes[i]=s;break}}
   }
 
-  var fields={"SHOOTING DAY":s.shootDay||"","COMPLEXITY":s.complexity,"SCHED NOTES":s.notes||""};
+  var fields={"SHOOTING DAY":s.shootDay||"","COMPLEXITY":s.complexity,"SCHED NOTES":s.notes||"",
+              "SCENE SHORT SUMMARY":s.shortSummary||""};
   for(var key in RW_CATS)fields[RW_CATS[key]]=s[key]||[];
 
   // prose-column categories go over separately so the script can reconcile them
@@ -1038,6 +1058,26 @@ function saveEdit(){
   closeModal();render();if(selDay)renderDayPanel(selDay);
   saveSceneFields(s,fields,lists).then(function(){toast("Scene saved","ok")});
 }
+/**
+ * Deletes the scene's row from the Sequences tab. The script refuses if the row
+ * has a written summary — those get deleted in the sheet, where undo exists.
+ */
+function deleteScene(uid){
+  var s=getScene(uid);if(!s)return;
+  if(!confirm('Delete '+(s.seqLabel||"this scene")+(s.title?' — '+s.title:'')+'?\n\n'+
+              'This removes its row from the Sequences tab.'))return;
+
+  var keep=[];
+  for(var i=0;i<scenes.length;i++){if(scenes[i].uid!==uid)keep.push(scenes[i])}
+  scenes=keep;
+  closeModal();render();if(selDay)renderDayPanel(selDay);
+
+  apiWrite({action:"deleteScene",uid:uid}).then(function(r){
+    if(r&&r.error){toast(r.error,"err");loadFromSheet(true)}   // refused — put it back
+    else toast("Scene deleted","ok");
+  });
+}
+
 function closeModal(){document.getElementById("modalMount").innerHTML=""}
 
 // ── SETTINGS ─────────────────────────────────────────────────
@@ -1114,9 +1154,9 @@ function renderSettings(){
     h+='<h3 style="font-family:EB Garamond,Georgia,serif;font-size:18px;color:#e8d5a0;font-weight:400;margin-bottom:14px">About</h3>';
     h+='<div style="font-size:11px;color:#a09585;line-height:1.8">';
     h+='The <strong>Sequences</strong> tab of the production document is the database. Each scene row carries its own <strong>SHOOTING DAY</strong>, so a scene can only ever be in one place.<br><br>';
-    h+='Editable here: <strong>Shoot Day, Complexity, Cast, Locations, Props, Extras, Act, Camera, Lens, Time of Day, Lighting, Weather, Status, Notes</strong>.<br>';
+    h+='Editable here: <strong>Short Summary, Shoot Day, Complexity, Cast, Locations, Props, Extras, Act, Camera, Lens, Time of Day, Lighting, Weather, Status, Notes</strong>.<br>';
     h+='The prose columns reconcile rather than overwrite &mdash; your own wording survives being edited from the app.<br><br>';
-    h+='Read-only here, edited in the sheet: <strong>summaries, sluglines, addresses, wardrobe, hair &amp; makeup, stunts, VFX</strong>.<br><br>';
+    h+='Read-only here, edited in the sheet: <strong>detailed summaries, sluglines, addresses, wardrobe, hair &amp; makeup, stunts, VFX</strong>.<br><br>';
     h+='Lists in the sheet split on a <strong>semicolon or a line break</strong>, never a comma.<br><br>';
     h+='<span style="color:#6a5e52">Scenes: '+scenes.length+' &middot; shoot days: '+shootDates().length+' &middot; revision: '+rev+'</span>';
     h+='</div>';
