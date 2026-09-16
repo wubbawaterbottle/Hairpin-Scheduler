@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Project Hairpin — Scheduler</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=EB+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="task-manager.css">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'DM Sans','Helvetica Neue',sans-serif;background:#141210;color:#e8e0d6;min-height:100vh}
@@ -254,7 +255,11 @@ button,input,textarea,select{font-family:inherit}
 <div class="toast" id="toast"></div>
 
 <div class="header">
-  <div><h1>PROJECT HAIRPIN</h1><div class="sub">Production Scheduler</div></div>
+  <div class="brand-date"><div id="todayDate" class="today-date"></div><div><h1>PROJECT HAIRPIN</h1><div class="sub">Production Scheduler</div></div></div>
+  <div class="app-tabs" role="tablist" aria-label="Production views">
+    <button class="app-tab active" id="schedulerTab" onclick="showAppPage('scheduler')">Scheduler</button>
+    <button class="app-tab" id="tasksTab" onclick="showAppPage('tasks')">Task Manager</button>
+  </div>
   <div style="display:flex;gap:6px;flex-wrap:wrap">
     <button class="hbtn live" id="liveBtn" onclick="refreshNow()" title="Refresh from the sheet">&#8635; Live</button>
     <button class="hbtn" id="lockBtn" onclick="toggleLock()" title="Click to enter the edit code">&#128274; View only</button>
@@ -264,11 +269,12 @@ button,input,textarea,select{font-family:inherit}
   </div>
 </div>
 <div class="sb-backdrop" id="sbBackdrop" onclick="toggleSidebar()"></div>
-<div class="main">
+<div class="main" id="schedulerPage">
   <div class="left" id="leftPanel"></div>
   <div class="cal-wrap" id="calWrap"></div>
   <div id="dayPanelMount"></div>
 </div>
+<div id="taskManagerPage" class="tm-page" hidden></div>
 <div id="modalMount"></div>
 <div id="lockMount"></div>
 
@@ -463,6 +469,7 @@ function applyLock(){
     b.title=canEdit()?"Click to return to view only":"Click to enter the edit code";
   }
   if(n)n.style.display=canEdit()?"":"none";
+  if(window.syncProductionLock)window.syncProductionLock();
 }
 function setLive(busy){
   var b=document.getElementById("liveBtn");if(!b)return;
@@ -1343,5 +1350,6 @@ function renameCat(idx){
   loadFromSheet().then(function(ok){ if(ok)startPolling() });
 })();
 </script>
+<script src="task-manager.js"></script>
 </body>
 </html>
