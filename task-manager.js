@@ -11,7 +11,7 @@
    merged into memory and re-rendered in place. The database is downloaded once per
    unlock, never after a checkbox. */
 var production={people:[],items:[],requirements:[],staffing:[],tasks:[],notes:[]};
-var tmLoaded=false,tmLoading=false,tmView="todo",tmQuery="",tmDrag=null;
+var tmLoaded=false,tmLoading=false,tmView="sequences",tmQuery="",tmDrag=null;   // Sequences opens first (Mr. John, 2026-09-17)
 var tmPeopleFilter="all",tmShowDone=false,tmShowRemoved=false,tmPending=0,tmSavedTimer=null;
 var TM_GROUPS=["Cast","Crew","Producer","Extras","Stunts","HMU","Wardrobe"];
 var tmJustDone={};   // tasks ticked this session stay visible, struck through, until the view is reopened
@@ -147,17 +147,62 @@ function tmSave(payload){
   tmPending++;tmSaveState("saving",tmChainLabel||"Saving…");
   return apiWrite(payload).then(function(r){
     tmPending--;
-    if(!r||r.error){tmSaveState("error","Save failed: "+(r&&r.error||"no response"));toast("Save failed: "+(r&&r.error||"no response"),"err");return r||{error:"no response"}}
+    if(!r||r.error){
+      var msg=tmErrorText(r);
+      tmSaveState("error",msg);toast(msg,"err");
+      clearTimeout(tmSavedTimer);tmSavedTimer=setTimeout(function(){var el=document.getElementById("tmSaveState");if(el&&el.className.indexOf("error")>=0){el.className="tm-save";el.textContent=""}},8000);
+      return r||{error:"no response"};
+    }
     if(!tmPending)tmSaveState("saved");
     return r;
   });
 }
-function tmSaveTask(record){return tmSave({action:"saveTask",record:record}).then(function(r){if(r&&!r.error)tmMerge(production.tasks,"TASK_ID",r.record||record);return r})}
-function tmSaveItem(record){return tmSave({action:"saveItem",record:record}).then(function(r){if(r&&!r.error)tmMerge(production.items,"ITEM_ID",r.record||record);return r})}
-function tmSavePerson(record){return tmSave({action:"savePerson",record:record}).then(function(r){if(r&&!r.error)tmMerge(production.people,"PERSON_ID",r.record||record);return r})}
-function tmSaveStaffing(record){return tmSave({action:"saveStaffing",record:record}).then(function(r){if(r&&!r.error)tmMerge(production.staffing,"STAFFING_ID",r.record||record);return r})}
-function tmSaveRequirement(record){return tmSave({action:"saveRequirement",record:record}).then(function(r){if(r&&!r.error)tmMerge(production.requirements,"REQUIREMENT_ID",r.record||record);return r})}
-function tmSaveNote(record){return tmSave({action:"saveNote",record:record}).then(function(r){if(r&&!r.error)tmMerge(production.notes,"NOTE_ID",r.record||record);return r})}
+/** Turns backend errors into something Mr. John can act on. */
+function tmErrorText(r){
+  var e=r&&r.error?String(r.error):"no response";
+  if(/Unknown write action:\s*delete/i.test(e))return"Removing needs the new Code.gs — do Part 1 of the deployment steps (paste, then Deploy → New version)";
+  if(/Unknown write action/i.test(e))return"The live Code.gs is older than the app — do Part 1 of the deployment steps";
+  if(/locked/i.test(e))return"Editing is locked — tap the lock and enter the code";
+  if(/Timeout/i.test(e))return"The sheet didn't answer in time — the change is undone here; try again";
+  return"Save failed: "+e;
+}
+/* Optimistic saves. The record goes into memory first and the screen updates at
+   once; the write runs in the background. If the sheet refuses, the previous
+   state is put back and the error is shown. IDs are generated here so a brand-new
+   row never has to be swapped for a server id. */
+var TM_LISTS={task:["tasks","TASK_ID","TSK"],item:["items","ITEM_ID","ITM"],person:["people","PERSON_ID","PER"],staffing:["staffing","STAFFING_ID","STF"],requirement:["requirements","REQUIREMENT_ID","REQ"],note:["notes","NOTE_ID","NOTE"]};
+var TM_ACTIONS={task:"saveTask",item:"saveItem",person:"savePerson",staffing:"saveStaffing",requirement:"saveRequirement",note:"saveNote"};
+function tmEnsureId(kind,record){var k=TM_LISTS[kind];if(!record[k[1]])record[k[1]]=k[2]+"-"+tmHex(4)+"-"+tmHex(4);return record}
+function tmOptimistic(kind,record,after){
+  var list=production[TM_LISTS[kind][0]],key=TM_LISTS[kind][1];
+  tmEnsureId(kind,record);
+  var prev=tmById(list,key,record[key]);prev=prev?Object.assign({},prev):null;
+  tmMerge(list,key,record);
+  if(after)after();
+  return tmSave({action:TM_ACTIONS[kind],record:record}).then(function(r){
+    if(r&&!r.error){if(r.record)tmMerge(list,key,r.record);return r}
+    if(prev)tmMerge(list,key,prev);else tmRemove(list,key,record[key]);   // roll back
+    if(after)after();
+    return r;
+  });
+}
+function tmOptimisticDelete(kind,id,action,after){
+  var list=production[TM_LISTS[kind][0]],key=TM_LISTS[kind][1];
+  var prev=tmById(list,key,id);if(!prev)return Promise.resolve({success:true});
+  var at=list.indexOf(prev);prev=Object.assign({},prev);tmRemove(list,key,id);
+  if(after)after();
+  return tmSave({action:action,id:id}).then(function(r){
+    if(r&&!r.error)return r;
+    list.splice(Math.min(at,list.length),0,prev);tmIndex();if(after)after();   // roll back, same position
+    return r;
+  });
+}
+function tmSaveTask(record,after){return tmOptimistic("task",record,after)}
+function tmSaveItem(record,after){return tmOptimistic("item",record,after)}
+function tmSavePerson(record,after){return tmOptimistic("person",record,after)}
+function tmSaveStaffing(record,after){return tmOptimistic("staffing",record,after)}
+function tmSaveRequirement(record,after){return tmOptimistic("requirement",record,after)}
+function tmSaveNote(record,after){return tmOptimistic("note",record,after)}
 /** Several small writes in a row (one per scene), with "Saving 3/9…" progress. Stops at the first failure. */
 function tmSaveChain(jobs,label){
   var done=0,failed=null,chain=Promise.resolve();
@@ -174,7 +219,7 @@ function tmPatch(kind,id,field,value){
   var record=Object.assign({},rec);record[field]=value;
   if(kind==="task"&&field==="DONE"){if(value){record.STATUS_COLOR="Green";tmJustDone[id]=true}else delete tmJustDone[id]}
   var save={task:tmSaveTask,item:tmSaveItem,person:tmSavePerson}[kind];
-  return save(record).then(function(r){if(r&&!r.error)renderTaskBody();return r});
+  return save(record,renderTaskBody);
 }
 function tmEditText(el,kind,id,field){
   var v=el.innerText.replace(/ /g," ").trim();
@@ -189,7 +234,7 @@ function renderTaskManager(){
   updateToday();
   if(!canEdit()){tmLoadError("Unlock editing to view private production details, contracts, assignments and notes.");return}
   if(!tmLoaded){loadProduction();return}
-  var tabs=[["todo","To-do"],["sequences","Sequences"],["people","People & Contracts"]];
+  var tabs=[["sequences","Sequences"],["todo","To-do"],["people","People & Contracts"]];
   var h='<div class="tm-shell"><div class="tm-toolbar"><div class="tm-subtabs">';
   for(var i=0;i<tabs.length;i++)h+='<button class="tm-subtab '+(tmView===tabs[i][0]?"active":"")+'" onclick="tmSetView(\''+tabs[i][0]+'\')">'+tabs[i][1]+'</button>';
   h+='</div><span id="tmSaveState" class="tm-save"></span><input class="tm-search" value="'+tmAttr(tmQuery)+'" placeholder="Search" oninput="tmSetQuery(this.value)">';
@@ -206,11 +251,14 @@ function renderTaskBody(){
 }
 
 // ── chips ────────────────────────────────────────────────────
+/** Item chip. With a requirement (scene context) it opens the small in-scene
+    popover; on its own it opens the full master record. */
 function tmItemChip(item,req){
   if(!item)return'<span class="tm-chip st-red" title="Missing item record">'+esc(req?req.SCENE_WORDING||req.ITEM_ID:"?")+'</span>';
   var st=req?tmInherited(req):tmStatus(item.STATUS);
   var tip=item.NAME+(req&&req.SCENE_WORDING&&req.SCENE_WORDING!==item.NAME?' — in this scene: '+req.SCENE_WORDING:'')+(req&&req.NOTES?' — '+req.NOTES:'')+(item.NOTES?' — '+item.NOTES:'');
-  return'<span class="tm-chip st-'+st.toLowerCase()+'" draggable="true" ondragstart="tmStartDrag(event,\'Item\',\''+tmAttr(item.ITEM_ID)+'\')" onclick="event.stopPropagation();openItemEditor(\''+tmAttr(item.ITEM_ID)+'\')" title="'+tmAttr(tip)+'"><i class="tm-dot '+st.toLowerCase()+'"></i>'+esc(item.NAME)+'</span>';
+  var click=req?'tmOpenReqPop(event,\''+tmAttr(req.REQUIREMENT_ID)+'\')':'openItemEditor(\''+tmAttr(item.ITEM_ID)+'\')';
+  return'<span class="tm-chip st-'+st.toLowerCase()+'" draggable="true" ondragstart="tmStartDrag(event,\'Item\',\''+tmAttr(item.ITEM_ID)+'\')" onclick="event.stopPropagation();'+click+'" title="'+tmAttr(tip)+'"><i class="tm-dot '+st.toLowerCase()+'"></i>'+esc(item.NAME)+(req&&req.NOTES?'<i class="tm-notemark" title="Has a scene note">•</i>':'')+'</span>';
 }
 function tmPersonChip(p,label){
   var st=tmPersonState(p);
@@ -221,13 +269,14 @@ function tmPersonChip(p,label){
 function tmSceneChip(s){
   return'<span class="tm-chip st-scene" draggable="true" ondragstart="tmStartDrag(event,\'Scene\',\''+tmAttr(s.uid)+'\')" onclick="event.stopPropagation();openSceneProduction(\''+tmAttr(s.uid)+'\')" title="'+tmAttr((s.seqLabel||s.seq)+' — '+s.title+(s.shootDay?' · '+s.shootDay:''))+'">'+esc(s.seqLabel||s.seq)+' '+esc(s.title)+'</span>';
 }
+/** A role in a scene: "Tom · Diego Sanchez", "1st AC · Bryson Sparks", "Bar patrons ×6". */
 function tmStaffChip(st){
   var ids=tmSplitIds(st.ASSIGNED_PERSON_IDS),names=ids.map(tmPersonName);
-  var p=ids.length===1?tmPerson(ids[0]):null;
-  var color=ids.length?(p?tmPersonState(p):"yellow"):"red";
-  var label=st.ROLE+(names.length?' · '+names.join(", "):' · unassigned');
-  var tip=st.DEPARTMENT+' — need '+tmNum(st.NEEDED,0)+', confirmed '+tmNum(st.CONFIRMED_COUNT,0)+(st.NOTES?' — '+st.NOTES:'');
-  return'<span class="tm-chip st-'+color+'" onclick="event.stopPropagation();openStaffingEditor(\''+tmAttr(st.STAFFING_ID)+'\',\''+tmAttr(st.SCENE_UID)+'\')" title="'+tmAttr(tip)+'"><i class="tm-dot '+color+'"></i>'+esc(label)+'</span>';
+  var p=ids.length===1?tmPerson(ids[0]):null,extras=st.DEPARTMENT==="Extras",need=tmNum(st.NEEDED,1);
+  var color=extras?"extra":ids.length?(p?tmPersonState(p):"yellow"):"red";
+  var label=extras?st.ROLE+(need>1?' ×'+need:''):st.ROLE+(names.length?' · '+names.join(", "):' · no one yet');
+  var tip=st.DEPARTMENT+(extras?' — '+need+' needed':'')+(st.NOTES?' — '+st.NOTES:'');
+  return'<span class="tm-chip st-'+color+'" onclick="event.stopPropagation();tmOpenStaffPop(event,\''+tmAttr(st.STAFFING_ID)+'\')" title="'+tmAttr(tip)+'"><i class="tm-dot '+color+'"></i>'+esc(label)+'</span>';
 }
 /** A task's links: its record (item or person) and, separately, its sequence. */
 function tmLinkChip(task){
@@ -336,7 +385,7 @@ function tmDropGroup(e,personId){
     var t=tmById(production.tasks,"TASK_ID",d.id);if(!t)return;
     var group=production.tasks.filter(function(x){return tmGroupKey(x)===personId&&!tmBool(x.DONE)&&x.TASK_ID!==d.id}).sort(tmTaskSort);
     var last=group.length?tmNum(group[group.length-1].MANUAL_ORDER,group.length):0;
-    tmSaveTask(Object.assign({},t,{ASSIGNEE_IDS:personId,MANUAL_ORDER:last+1})).then(function(r){if(r&&!r.error)renderTaskBody()});
+    tmSaveTask(Object.assign({},t,{ASSIGNEE_IDS:personId,MANUAL_ORDER:last+1}),renderTaskBody);
     return;
   }
   openTaskEditor(null,{type:d.type,id:d.id},personId);
@@ -357,38 +406,267 @@ function tmDropRow(e,targetId){
   var idx=before?pos:pos+1;
   var lo=idx>0?orders[idx-1]:orders[0]-1,hi=idx<orders.length?orders[idx]:orders[orders.length-1]+1;
   var newOrder=(lo+hi)/2;
-  tmSaveTask(Object.assign({},t,{ASSIGNEE_IDS:personId,MANUAL_ORDER:newOrder})).then(function(r){if(r&&!r.error)renderTaskBody()});
+  tmSaveTask(Object.assign({},t,{ASSIGNEE_IDS:personId,MANUAL_ORDER:newOrder}),renderTaskBody);
 }
 
 // ── SEQUENCES ────────────────────────────────────────────────
+/* One column per department. Every cell ends in a "+" that opens a toggle list —
+   the same tick-to-add idea as the Scheduler's scene editor. */
+var TM_CELLS=[
+  {key:"loc",label:"Location",types:["Location"]},
+  {key:"cast",label:"Cast",staff:"Cast"},
+  {key:"crew",label:"Crew & Extras",staff:"Crew"},
+  {key:"props",label:"Props & Vehicles",types:["Prop","Vehicle"]},
+  {key:"hmu",label:"Hair, Makeup & Wardrobe",types:["Hair & Makeup","Wardrobe"]},
+  {key:"fx",label:"VFX & Stunts",types:["VFX / SFX","Stunt"]}
+];
+var TM_ITEM_PREFIX={"Prop":"PROP","Location":"LOC","Vehicle":"VEH","Wardrobe":"WARD","Hair & Makeup":"HMU","VFX / SFX":"VFX","Stunt":"STNT"};
+function tmHex(n){var s=Math.floor(Math.random()*Math.pow(16,n)).toString(16).toUpperCase();while(s.length<n)s="0"+s;return s}
+function tmNewItemId(type,name){var slug=String(name||"item").toUpperCase().replace(/[^A-Z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,40)||"ITEM";return"ITM-"+(TM_ITEM_PREFIX[type]||"ITEM")+"-"+slug+"-"+tmHex(4)}
+function tmNewReqId(){return"REQ-"+tmHex(4)+"-"+tmHex(4)}
+function tmCell(key){for(var i=0;i<TM_CELLS.length;i++)if(TM_CELLS[i].key===key)return TM_CELLS[i];return null}
 function tmReqsOfType(uid,types){return (tmIx.reqsByScene[uid]||[]).filter(function(r){var it=tmIx.items[r.ITEM_ID];var ty=it?it.TYPE:r.ITEM_TYPE;return types.indexOf(ty)>=0})}
-function tmChipsFor(uid,types){var rs=tmReqsOfType(uid,types);if(!rs.length)return'<span class="tm-muted">—</span>';return rs.map(function(r){return tmItemChip(tmIx.items[r.ITEM_ID],r)}).join("")}
+function tmStaffOf(uid,dept){return (tmIx.staffByScene[uid]||[]).filter(function(x){return dept==="Cast"?x.DEPARTMENT==="Cast":x.DEPARTMENT!=="Cast"})}
+function tmCellChips(uid,cell){
+  var reqs=cell.types?tmReqsOfType(uid,cell.types):null,staff=cell.types?null:tmStaffOf(uid,cell.staff);
+  // when the table is sorted by this column, show its chips alphabetically too, so the sort is visible
+  if(tmSeqSort.key===cell.key){
+    if(reqs)reqs=reqs.slice().sort(function(a,b){var na=(tmIx.items[a.ITEM_ID]||{}).NAME||a.SCENE_WORDING||"",nb=(tmIx.items[b.ITEM_ID]||{}).NAME||b.SCENE_WORDING||"";return String(na).localeCompare(String(nb))});
+    else staff=staff.slice().sort(function(a,b){return String(a.ROLE).localeCompare(String(b.ROLE))});
+  }
+  var chips=reqs?reqs.map(function(r){return tmItemChip(tmIx.items[r.ITEM_ID],r)}):staff.map(tmStaffChip);
+  return chips.join("")+'<button class="tm-plus" title="Add to this scene" onclick="event.stopPropagation();tmOpenAddPop(event,\''+tmAttr(uid)+'\',\''+cell.key+'\')">+</button>';
+}
+/* Sorting. Default is scene order. Click a column header to sort by it (click again
+   to flip); the dropdown offers the same choices plus shoot date. */
+var tmSeqSort={key:"seq",dir:1};
+try{var _ss=JSON.parse(localStorage.getItem("hairpinSeqSort")||"null");if(_ss&&_ss.key)tmSeqSort=_ss}catch(e){}
+var TM_SORTS=[["seq","Scene order"],["day","Shoot date — filming first"],["loc","Location A→Z"],["cast","Cast A→Z"],["crew","Crew & Extras A→Z"],["props","Props & Vehicles A→Z"],["hmu","Hair, Makeup & Wardrobe A→Z"],["fx","VFX & Stunts A→Z"],["tasks","Tasks — most first"]];
+function tmSetSeqSort(key,dir){
+  if(dir===undefined)dir=tmSeqSort.key===key?-tmSeqSort.dir:1;
+  tmSeqSort={key:key,dir:dir};try{localStorage.setItem("hairpinSeqSort",JSON.stringify(tmSeqSort))}catch(e){}
+  renderTaskBody();
+}
+/** What a cell "says" for sorting: its chip names, alphabetical, joined. Empty cells sort last. */
+function tmCellSortText(s,cell){
+  var names=cell.types?tmReqsOfType(s.uid,cell.types).map(function(r){var it=tmIx.items[r.ITEM_ID];return it?it.NAME:r.SCENE_WORDING||""}):tmStaffOf(s.uid,cell.staff).map(function(st){return st.ROLE});
+  names=names.map(function(n){return String(n).toLowerCase()}).sort();
+  return names.join(" | ");
+}
+function tmSeqComparator(){
+  var key=tmSeqSort.key,dir=tmSeqSort.dir;
+  function bySeq(a,b){return seqNum(a)-seqNum(b)}
+  if(key==="seq")return function(a,b){return dir*bySeq(a,b)};
+  if(key==="day")return function(a,b){var da=a.shootDay||"",db=b.shootDay||"";if(!da&&!db)return bySeq(a,b);if(!da)return 1;if(!db)return -1;return da<db?-dir:da>db?dir:bySeq(a,b)};
+  if(key==="tasks")return function(a,b){var na=tmSceneOpenTasks(a.uid).length,nb=tmSceneOpenTasks(b.uid).length;return na!==nb?dir*(nb-na):bySeq(a,b)};
+  var cell=tmCell(key);if(!cell)return function(a,b){return bySeq(a,b)};
+  return function(a,b){var ta=tmCellSortText(a,cell),tb=tmCellSortText(b,cell);if(!ta&&!tb)return bySeq(a,b);if(!ta)return 1;if(!tb)return -1;return ta<tb?-dir:ta>tb?dir:bySeq(a,b)};
+}
+/** Open tasks that touch a scene: linked to it directly, or to an item it needs. Same set the Tasks cell shows. */
+function tmSceneOpenTasks(uid){
+  var out=(tmIx.tasksByScene[uid]||[]).filter(function(t){return !tmBool(t.DONE)});
+  (tmIx.reqsByScene[uid]||[]).forEach(function(r){(tmIx.tasksByItem[r.ITEM_ID]||[]).forEach(function(t){if(!tmBool(t.DONE)&&out.indexOf(t)<0)out.push(t)})});
+  return out;
+}
+function tmSortArrow(key){return tmSeqSort.key===key?'<span class="tm-sortarrow">'+(tmSeqSort.dir>0?'▲':'▼')+'</span>':''}
 function tmRenderSequences(){
   var rows=scenes.filter(function(s){
     if(!tmQuery)return true;
     var text=[s.seqLabel,s.title,s.shootDay].concat((tmIx.reqsByScene[s.uid]||[]).map(function(r){var it=tmIx.items[r.ITEM_ID];return it?it.NAME:r.SCENE_WORDING})).concat((tmIx.staffByScene[s.uid]||[]).map(function(st){return st.ROLE+" "+tmSplitIds(st.ASSIGNED_PERSON_IDS).map(tmPersonName).join(" ")})).join(" ");
     return tmMatch(text);
-  }).sort(function(a,b){return seqNum(a)-seqNum(b)});
-  var h='<div class="tm-muted tm-hint">Click a chip to edit its one master record — every sequence that uses it updates. Click a sequence for its scene-only notes.</div>';
-  h+='<div class="tm-table-wrap tm-sheet"><table class="tm-table tm-seq"><thead><tr><th class="tm-sticky">SEQ</th><th>Day</th><th>Location</th><th>Cast</th><th>Crew</th><th>Props &amp; Vehicles</th><th>HMU &amp; Wardrobe</th><th>VFX &amp; Stunts</th><th>Tasks</th></tr></thead><tbody>';
+  }).sort(tmSeqComparator());
+  if(!rows.length)return'<div class="tm-empty">No sequences match.</div>';
+  var h='<div class="tm-todo-head"><label class="tm-muted">Sort</label><select class="tm-select" onchange="tmSetSeqSort(this.value,1)">'+TM_SORTS.map(function(o){return'<option value="'+o[0]+'"'+(tmSeqSort.key===o[0]?' selected':'')+'>'+esc(o[1])+'</option>'}).join("")+'</select>';
+  h+='<button class="hbtn" title="Flip direction" onclick="tmSetSeqSort(tmSeqSort.key,-tmSeqSort.dir)">'+(tmSeqSort.dir>0?'▲ ascending':'▼ descending')+'</button>';
+  if(tmSeqSort.key!=="seq")h+='<button class="hbtn" onclick="tmSetSeqSort(\'seq\',1)">Back to scene order</button>';
+  h+='<span class="tm-muted">'+rows.length+' sequences · click a column header to sort by it</span></div>';
+  h+='<table class="tm-table tm-seq"><thead><tr><th class="tm-seqhead tm-sortable" onclick="tmSetSeqSort(tmSeqSort.key===\'seq\'?\'day\':\'seq\',1)" title="Click: scene order ↔ shoot date">Sequence'+(tmSeqSort.key==="day"?' <span class="tm-faint">by shoot date</span>':'')+tmSortArrow(tmSeqSort.key==="day"?"day":"seq")+'</th>';
+  TM_CELLS.forEach(function(c){h+='<th class="tm-sortable" onclick="tmSetSeqSort(\''+c.key+'\')" title="Sort by '+tmAttr(c.label)+'">'+esc(c.label)+tmSortArrow(c.key)+'</th>'});
+  h+='<th class="tm-sortable" onclick="tmSetSeqSort(\'tasks\')" title="Sort by open tasks">Tasks'+tmSortArrow("tasks")+'</th></tr></thead><tbody>';
   rows.forEach(function(s){
-    var staff=tmIx.staffByScene[s.uid]||[],cast=staff.filter(function(x){return x.DEPARTMENT==="Cast"}),crew=staff.filter(function(x){return x.DEPARTMENT!=="Cast"});
     var tasks=(tmIx.tasksByScene[s.uid]||[]).filter(function(t){return !tmBool(t.DONE)});
     var itemTasks=[];(tmIx.reqsByScene[s.uid]||[]).forEach(function(r){(tmIx.tasksByItem[r.ITEM_ID]||[]).forEach(function(t){if(!tmBool(t.DONE)&&itemTasks.indexOf(t)<0&&tasks.indexOf(t)<0)itemTasks.push(t)})});
-    h+='<tr class="tm-row" onclick="openSceneProduction(\''+tmAttr(s.uid)+'\')">';
-    h+='<td class="tm-sticky tm-seqcell"><b>'+esc(s.seqLabel||s.seq)+'</b><div>'+esc(s.title)+'</div></td>';
-    h+='<td class="tm-daycell">'+(s.shootDay?'<span class="'+tmDueClass(s.shootDay)+'">'+esc(tmFmtDate(s.shootDay))+'</span>':'<span class="tm-muted">unscheduled</span>')+'</td>';
-    h+='<td>'+tmChipsFor(s.uid,["Location"])+'</td>';
-    h+='<td>'+(cast.length?cast.map(tmStaffChip).join(""):'<span class="tm-muted">—</span>')+'</td>';
-    h+='<td>'+crew.map(tmStaffChip).join("")+'<button class="tm-chip-add" title="Add a crew need" onclick="event.stopPropagation();openStaffingEditor(null,\''+tmAttr(s.uid)+'\')">+</button></td>';
-    h+='<td>'+tmChipsFor(s.uid,["Prop","Vehicle"])+'</td>';
-    h+='<td>'+tmChipsFor(s.uid,["Hair & Makeup","Wardrobe"])+'</td>';
-    h+='<td>'+tmChipsFor(s.uid,["VFX / SFX","Stunt"])+'</td>';
-    h+='<td class="tm-taskcell">'+tasks.map(function(t){return tmMiniTask(t,false)}).join("")+itemTasks.map(function(t){return tmMiniTask(t,true)}).join("")+'<button class="tm-chip-add" title="New task for this sequence" onclick="event.stopPropagation();openTaskEditor(null,{type:\'Scene\',id:\''+tmAttr(s.uid)+'\'})">+</button></td></tr>';
+    h+='<tr class="tm-row'+tmFlagClasses(s)+'" data-scene="'+tmAttr(s.uid)+'">';
+    h+='<td class="tm-seqcell" onclick="openSceneProduction(\''+tmAttr(s.uid)+'\')">'+tmSeqCellInner(s)+'</td>';
+    TM_CELLS.forEach(function(c){h+='<td class="tm-cell" data-cell="'+c.key+'">'+tmCellChips(s.uid,c)+'</td>'});
+    h+='<td class="tm-cell tm-taskcell">'+tasks.map(function(t){return tmMiniTask(t,false)}).join("")+itemTasks.map(function(t){return tmMiniTask(t,true)}).join("")+'<button class="tm-plus" title="New task for this sequence" onclick="event.stopPropagation();openTaskEditor(null,{type:\'Scene\',id:\''+tmAttr(s.uid)+'\'})">+</button></td></tr>';
   });
-  h+='</tbody></table></div>';
-  if(!rows.length)h='<div class="tm-empty">No sequences match.</div>';
+  return h+'</tbody></table>';
+}
+/* Shot / Pickup are the Scheduler's flags (index.html: isShot, needsPickup,
+   toggleFlag). The Task Manager reads the same scenes[] and calls the same toggle,
+   so one click updates both tabs and writes the one STATUS cell. */
+function tmFlagClasses(s){return (typeof isShot==="function"&&isShot(s)?" shot":"")+(typeof needsPickup==="function"&&needsPickup(s)?" pickup":"")}
+function tmSeqCellInner(s){
+  var shot=typeof isShot==="function"&&isShot(s),pk=typeof needsPickup==="function"&&needsPickup(s),note=pk&&typeof pickupNote==="function"?pickupNote(s):"";
+  var h='<div class="tm-seqflags"><button class="fa'+(shot?' on':'')+'" title="'+(shot?'Shot — click to unmark':'Mark as shot')+'" onclick="event.stopPropagation();toggleFlag(\''+tmAttr(s.uid)+'\',SHOT)">&#10003;</button><button class="fa pk'+(pk?' on':'')+'" title="'+(pk?'Pickup owed'+(note?': '+tmAttr(note):'')+' — click to clear':'Flag a pickup')+'" onclick="event.stopPropagation();toggleFlag(\''+tmAttr(s.uid)+'\',PICKUP)">&#9685;</button></div>';
+  h+='<b>'+(shot?'&#10003; ':'')+esc(s.seqLabel||s.seq)+'</b>'+(pk?'<span class="pk-tag" title="'+tmAttr(note||"Pickup owed")+'">pickup</span>':'')+'<div class="tm-seqtitle">'+esc(s.title)+'</div><div class="tm-seqday '+(shot?'':tmDueClass(s.shootDay))+'">'+(s.shootDay?esc(tmFmtDate(s.shootDay)):'unscheduled')+'</div>';
+  if(pk&&note)h+='<div class="tm-pknote">'+esc(note)+'</div>';
   return h;
+}
+/** Called by the Scheduler's toggleFlag so the Sequences row follows immediately. */
+function tmOnSceneFlag(uid){
+  var tr=document.querySelector('tr[data-scene="'+uid+'"]');if(!tr)return;
+  var s=tmScene(uid);tr.className="tm-row"+tmFlagClasses(s);
+  var td=tr.querySelector(".tm-seqcell");if(td)td.innerHTML=tmSeqCellInner(s);
+}
+/** Re-render just one sequence row after a change inside it. */
+function tmRefreshSceneRow(uid){
+  var tr=document.querySelector('tr[data-scene="'+uid+'"]');
+  if(tr)TM_CELLS.forEach(function(c){var td=tr.querySelector('td[data-cell="'+c.key+'"]');if(td)td.innerHTML=tmCellChips(uid,c)});
+  else if(tmView==="sequences")renderTaskBody();
+  var modal=document.querySelector('.tm-scene-grid[data-scene-modal="'+uid+'"]');
+  if(modal)TM_CELLS.forEach(function(c){var box=modal.querySelector('[data-cell="'+c.key+'"]');if(box)box.innerHTML=tmCellChips(uid,c)});
+}
+
+// ── POPOVERS ─────────────────────────────────────────────────
+/* A small card anchored to whatever was clicked. One popover at a time; it
+   re-renders itself after each write so ticks update in place. */
+var tmPopState=null;
+function tmPopClose(){var el=document.getElementById("tmPop");if(el)el.parentNode.removeChild(el);tmPopState=null}
+function tmPopOpen(anchor,render){
+  tmPopClose();
+  var el=document.createElement("div");el.id="tmPop";el.className="tm-pop";el.onclick=function(e){e.stopPropagation()};
+  document.body.appendChild(el);
+  tmPopState={anchor:anchor,render:render};
+  tmPopRender();
+  var r=anchor.getBoundingClientRect(),w=el.offsetWidth,hgt=el.offsetHeight;
+  var left=Math.max(8,Math.min(r.left,window.innerWidth-w-8));
+  var top=r.bottom+6;if(top+hgt>window.innerHeight-8)top=Math.max(8,r.top-hgt-6);
+  el.style.left=left+"px";el.style.top=top+"px";
+  setTimeout(function(){var f=el.querySelector("[autofocus]");if(f)f.focus()},30);
+}
+function tmPopRender(){var el=document.getElementById("tmPop");if(!el||!tmPopState)return;var q=el.querySelector(".tm-pop-search");var qv=q?q.value:null,sel=q?q.selectionStart:0;el.innerHTML=tmPopState.render();var q2=el.querySelector(".tm-pop-search");if(q2&&qv!==null){q2.value=qv;try{q2.setSelectionRange(sel,sel)}catch(e){}q2.focus()}}
+document.addEventListener("click",function(e){var p=document.getElementById("tmPop");if(p&&!p.contains(e.target))tmPopClose()});
+document.addEventListener("keydown",function(e){if(e.key==="Escape")tmPopClose()});
+var tmPopQuery="";
+function tmPopSetQuery(v){tmPopQuery=v;tmPopRender()}
+function tmNameKey(s){return String(s||"").toLowerCase().replace(/\s+/g," ").trim()}
+function tmFindPersonByName(name){var k=tmNameKey(name);if(!k)return null;for(var i=0;i<production.people.length;i++)if(tmActive(production.people[i])&&tmNameKey(production.people[i].NAME)===k)return production.people[i];return null}
+function tmTog(on,label,onclick,color,sub){return'<button type="button" class="tm-tog'+(on?' on':'')+(color?' c-'+color:'')+'" onclick="'+onclick+'">'+(on?'✓ ':'')+esc(label)+(sub?'<span class="tm-tog-sub">'+esc(sub)+'</span>':'')+'</button>'}
+
+/** "+" in a Sequences cell. */
+function tmOpenAddPop(e,uid,key){
+  e.stopPropagation();tmPopQuery="";
+  var cell=tmCell(key),s=tmScene(uid);
+  tmPopOpen(e.currentTarget,function(){
+    var q=tmPopQuery.toLowerCase();function ok(t){return !q||String(t).toLowerCase().indexOf(q)>=0}
+    var h='<div class="tm-pop-head"><b>'+esc(s.seqLabel||s.seq)+'</b> · '+esc(cell.label)+'<button class="tm-more" onclick="tmPopClose()">✕</button></div>';
+    h+='<input class="tm-input tm-pop-search" placeholder="Search or type a new name" autofocus oninput="tmPopSetQuery(this.value)">';
+    if(cell.types){
+      var have={};(tmIx.reqsByScene[uid]||[]).forEach(function(r){have[r.ITEM_ID]=r.REQUIREMENT_ID});
+      var opts=production.items.filter(function(i){return cell.types.indexOf(i.TYPE)>=0&&tmActive(i)&&ok(i.NAME)}).sort(function(a,b){return (have[b.ITEM_ID]?1:0)-(have[a.ITEM_ID]?1:0)||String(a.NAME).localeCompare(String(b.NAME))});
+      h+='<div class="tm-tog-row">'+opts.slice(0,80).map(function(i){var on=!!have[i.ITEM_ID];return tmTog(on,i.NAME,on?'tmPopRemoveReq(\''+tmAttr(have[i.ITEM_ID])+'\',\''+tmAttr(uid)+'\')':'tmPopAddReq(\''+tmAttr(uid)+'\',\''+tmAttr(i.ITEM_ID)+'\')',tmStatus(i.STATUS).toLowerCase())}).join("")+'</div>';
+      if(opts.length>80)h+='<div class="tm-muted">'+(opts.length-80)+' more — keep typing</div>';
+      if(tmPopQuery.trim()&&!opts.some(function(i){return tmNameKey(i.NAME)===tmNameKey(tmPopQuery)}))h+='<div class="tm-pop-new">'+cell.types.map(function(t){return'<button class="hbtn gold" onclick="tmPopNewItem(\''+tmAttr(uid)+'\',\''+tmAttr(t)+'\')">+ New '+esc(t.toLowerCase())+': “'+esc(tmPopQuery.trim())+'”</button>'}).join("")+'</div>';
+    }else if(cell.staff==="Cast"){
+      var inScene=tmStaffOf(uid,"Cast"),byRole={},byPerson={};
+      inScene.forEach(function(st){byRole[tmNameKey(st.ROLE)]=st.STAFFING_ID;tmSplitIds(st.ASSIGNED_PERSON_IDS).forEach(function(pid){byPerson[pid]=st.STAFFING_ID})});
+      var cat=typeof getCat==="function"?getCat("cast"):null,chars=cat?cat.options.slice():[];
+      chars=chars.filter(function(c){var note=cat.meta[c]&&cat.meta[c].note||"";return ok(c+" "+note)});
+      h+='<div class="tm-pop-label">Characters</div><div class="tm-tog-row">'+chars.map(function(c){var on=!!byRole[tmNameKey(c)],note=cat.meta[c]&&cat.meta[c].note||"",actor=tmFindPersonByName(note);return tmTog(on,c,on?'tmPopRemoveStaff(\''+tmAttr(byRole[tmNameKey(c)])+'\',\''+tmAttr(uid)+'\')':'tmPopAddCast(\''+tmAttr(uid)+'\',\''+tmAttr(c)+'\',\''+tmAttr(actor?actor.PERSON_ID:"")+'\')',actor?tmPersonState(actor):"",actor?actor.NAME:(/^NEW/i.test(note)?"no actor yet":note))}).join("")+'</div>';
+      var people=tmActivePeople().filter(function(p){return ok(p.NAME+" "+(p.ROLES_CHARACTERS||""))}).sort(function(a,b){var ac=(a.GROUPS||"").indexOf("Cast")>=0?0:1,bc=(b.GROUPS||"").indexOf("Cast")>=0?0:1;return ac-bc||String(a.NAME).localeCompare(String(b.NAME))});
+      h+='<div class="tm-pop-label">People</div><div class="tm-tog-row">'+people.map(function(p){var on=!!byPerson[p.PERSON_ID];return tmTog(on,p.NAME,on?'tmPopRemoveStaff(\''+tmAttr(byPerson[p.PERSON_ID])+'\',\''+tmAttr(uid)+'\')':'tmPopAddCast(\''+tmAttr(uid)+'\',\''+tmAttr(p.ROLES_CHARACTERS?p.ROLES_CHARACTERS.split(/[;,\/]/)[0].trim():p.NAME)+'\',\''+tmAttr(p.PERSON_ID)+'\')',tmPersonState(p),p.ROLES_CHARACTERS||p.GROUPS)}).join("")+'</div>';
+      if(tmPopQuery.trim())h+='<div class="tm-pop-new"><button class="hbtn gold" onclick="tmPopAddCast(\''+tmAttr(uid)+'\',\''+tmAttr(tmPopQuery.trim())+'\',\'\')">+ New character “'+esc(tmPopQuery.trim())+'” (no actor yet)</button><button class="hbtn" onclick="tmPopNewPerson(\''+tmAttr(uid)+'\',\'Cast\')">+ New person “'+esc(tmPopQuery.trim())+'”</button></div>';
+    }else{
+      var crew=tmStaffOf(uid,"Crew"),byP={},byRoleX={};
+      crew.forEach(function(st){tmSplitIds(st.ASSIGNED_PERSON_IDS).forEach(function(pid){byP[pid]=st.STAFFING_ID});if(st.DEPARTMENT==="Extras")byRoleX[tmNameKey(st.ROLE)]=st.STAFFING_ID});
+      var ppl=tmActivePeople().filter(function(p){return ok(p.NAME+" "+(p.ROLES_CHARACTERS||"")+" "+(p.GROUPS||""))}).sort(function(a,b){var ac=/Crew|Producer/.test(a.GROUPS||"")?0:1,bc=/Crew|Producer/.test(b.GROUPS||"")?0:1;return ac-bc||String(a.NAME).localeCompare(String(b.NAME))});
+      h+='<div class="tm-pop-label">Crew</div><div class="tm-tog-row">'+ppl.map(function(p){var on=!!byP[p.PERSON_ID];return tmTog(on,p.NAME,on?'tmPopRemoveStaff(\''+tmAttr(byP[p.PERSON_ID])+'\',\''+tmAttr(uid)+'\')':'tmPopAddCrew(\''+tmAttr(uid)+'\',\''+tmAttr(p.PERSON_ID)+'\')',tmPersonState(p),p.ROLES_CHARACTERS||p.GROUPS)}).join("")+'</div>';
+      var xcat=typeof getCat==="function"?getCat("extras"):null,xs=xcat?xcat.options.filter(ok):[];
+      h+='<div class="tm-pop-label">Extras</div><div class="tm-tog-row">'+xs.map(function(x){var on=!!byRoleX[tmNameKey(x)];return tmTog(on,x,on?'tmPopRemoveStaff(\''+tmAttr(byRoleX[tmNameKey(x)])+'\',\''+tmAttr(uid)+'\')':'tmPopAddExtras(\''+tmAttr(uid)+'\',\''+tmAttr(x)+'\')',"extra")}).join("")+(xs.length?'':'<span class="tm-muted">No extras match</span>')+'</div>';
+      if(tmPopQuery.trim())h+='<div class="tm-pop-new"><button class="hbtn gold" onclick="tmPopAddExtras(\''+tmAttr(uid)+'\',\''+tmAttr(tmPopQuery.trim())+'\')">+ Extras: “'+esc(tmPopQuery.trim())+'”</button><button class="hbtn" onclick="tmPopNewPerson(\''+tmAttr(uid)+'\',\'Crew\')">+ New crew member “'+esc(tmPopQuery.trim())+'”</button></div>';
+    }
+    return h+'<div class="tm-pop-foot tm-muted">Tick to add · tick again to remove · each is one save</div>';
+  });
+}
+function tmAfterScene(uid){tmRefreshSceneRow(uid);tmPopRender()}
+function tmSceneAfter(uid){return function(){tmAfterScene(uid)}}
+function tmPopAddReq(uid,itemId){
+  var item=tmIx.items[itemId],s=tmScene(uid);if(!item)return;
+  tmSaveRequirement({REQUIREMENT_ID:tmNewReqId(),SCENE_UID:uid,SEQ:s.seqLabel||s.seq,ITEM_ID:itemId,ITEM_TYPE:item.TYPE,SCENE_WORDING:item.NAME,STATUS_OVERRIDE:"",QUANTITY_NEEDED:1,QUANTITY_READY:"",OWNER:"",NOTES:""},tmSceneAfter(uid));
+}
+function tmPopNewItem(uid,type){
+  var name=tmPopQuery.trim();if(!name)return;
+  var rec={ITEM_ID:tmNewItemId(type,name),TYPE:type,NAME:name,STATUS:"Red",CONTRACT_STATUS:"",OWNER:"",QUANTITY_NEEDED:"",QUANTITY_READY:"",LINK:"",ADDRESS:"",NOTES:"",ALIASES:"",SOURCE_TABS:"Task Manager",ACTIVE:true};
+  tmPopQuery="";
+  tmSaveItem(rec,tmSceneAfter(uid));      // the item exists in memory now …
+  tmPopAddReq(uid,rec.ITEM_ID);            // … so the scene link can go straight after it
+}
+function tmPopRemoveReq(reqId,uid){tmOptimisticDelete("requirement",reqId,"deleteRequirement",tmSceneAfter(uid))}
+function tmPopRemoveStaff(stId,uid){tmOptimisticDelete("staffing",stId,"deleteStaffing",tmSceneAfter(uid))}
+function tmPopAddCast(uid,role,personId){
+  var s=tmScene(uid);tmPopQuery="";
+  tmSaveStaffing({STAFFING_ID:"",SCENE_UID:uid,SEQ:s.seqLabel||s.seq,DEPARTMENT:"Cast",ROLE:role,NEEDED:1,ASSIGNED_PERSON_IDS:personId||"",CONFIRMED_COUNT:personId?1:0,GAP:personId?0:1,NOTES:""},tmSceneAfter(uid));
+}
+function tmPopAddCrew(uid,personId){
+  var s=tmScene(uid),p=tmPerson(personId),role=p&&p.ROLES_CHARACTERS?p.ROLES_CHARACTERS.split(/[;,\/]/)[0].trim():"Crew";
+  tmSaveStaffing({STAFFING_ID:"",SCENE_UID:uid,SEQ:s.seqLabel||s.seq,DEPARTMENT:"Crew",ROLE:role,NEEDED:1,ASSIGNED_PERSON_IDS:personId,CONFIRMED_COUNT:1,GAP:0,NOTES:""},tmSceneAfter(uid));
+}
+function tmPopAddExtras(uid,desc){
+  var s=tmScene(uid);tmPopQuery="";
+  tmSaveStaffing({STAFFING_ID:"",SCENE_UID:uid,SEQ:s.seqLabel||s.seq,DEPARTMENT:"Extras",ROLE:desc,NEEDED:1,ASSIGNED_PERSON_IDS:"",CONFIRMED_COUNT:0,GAP:1,NOTES:""},tmSceneAfter(uid));
+}
+function tmPopNewPerson(uid,group){
+  var name=tmPopQuery.trim();if(!name)return;
+  var rec={PERSON_ID:tmNewPersonId(name),NAME:name,GROUPS:group,ROLES_CHARACTERS:"",PROJECT_STATUS:"Candidate",CONTRACT_STATUS:"Not Sent",ACTIVE:true,SOURCE_TABS:"Task Manager"};
+  tmPopQuery="";
+  tmSavePerson(rec,tmSceneAfter(uid));
+  if(group==="Cast")tmPopAddCast(uid,name,rec.PERSON_ID);else tmPopAddCrew(uid,rec.PERSON_ID);
+}
+
+/** Click on an item chip inside a scene: status, scene note, remove, full record. */
+function tmOpenReqPop(e,reqId){
+  e.stopPropagation();
+  var req=tmById(production.requirements,"REQUIREMENT_ID",reqId);if(!req)return;
+  var uid=req.SCENE_UID;
+  tmPopOpen(e.currentTarget,function(){
+    var r=tmById(production.requirements,"REQUIREMENT_ID",reqId);if(!r)return'<div class="tm-muted">Removed.</div>';
+    var item=tmIx.items[r.ITEM_ID]||{NAME:r.SCENE_WORDING,TYPE:r.ITEM_TYPE,STATUS:"Red"},uses=(tmIx.reqsByItem[r.ITEM_ID]||[]).length;
+    var h='<div class="tm-pop-head"><b>'+esc(item.NAME)+'</b><span class="tm-muted">'+esc(item.TYPE)+' · in '+uses+' scene'+(uses===1?'':'s')+'</span><button class="tm-more" onclick="tmPopClose()">✕</button></div>';
+    h+='<div class="tm-pop-label">Status (everywhere it appears)</div><div class="tm-tog-row">'+TM_STATUSES.map(function(st){return tmTog(tmStatus(item.STATUS)===st,st,'tmPopSetItemStatus(\''+tmAttr(item.ITEM_ID)+'\',\''+st+'\')',st.toLowerCase())}).join("")+'</div>';
+    h+='<div class="tm-pop-label">Note for this scene only</div><input class="tm-input" value="'+tmAttr(r.NOTES||"")+'" placeholder="'+tmAttr(r.SCENE_WORDING&&r.SCENE_WORDING!==item.NAME?'Script says: '+r.SCENE_WORDING:'e.g. needs to be the dented one')+'" onkeydown="if(event.key===\'Enter\')this.blur()" onblur="tmPopSetReqNote(\''+tmAttr(reqId)+'\',this.value)">';
+    h+='<div class="tm-pop-actions"><button class="hbtn tm-danger" onclick="tmPopRemoveReq(\''+tmAttr(reqId)+'\',\''+tmAttr(uid)+'\');tmPopClose()">Remove from scene</button><span class="tm-spacer"></span><button class="hbtn" onclick="tmPopClose();openItemEditor(\''+tmAttr(item.ITEM_ID)+'\')">Full record…</button></div>';
+    return h;
+  });
+}
+function tmPopSetItemStatus(itemId,st){var it=tmIx.items[itemId];if(!it||tmStatus(it.STATUS)===st)return;tmSaveItem(Object.assign({},it,{STATUS:st}),function(){renderTaskBody();tmPopRender()})}
+function tmPopSetReqNote(reqId,v){var r=tmById(production.requirements,"REQUIREMENT_ID",reqId);if(!r||String(r.NOTES||"")===v.trim())return;tmSaveRequirement(Object.assign({},r,{NOTES:v.trim()}),function(){tmRefreshSceneRow(r.SCENE_UID)})}
+
+/** Click on a cast / crew / extras chip: who plays it, how many, remove. */
+function tmOpenStaffPop(e,stId){
+  e.stopPropagation();
+  var st=tmById(production.staffing,"STAFFING_ID",stId);if(!st)return;
+  var uid=st.SCENE_UID;
+  tmPopOpen(e.currentTarget,function(){
+    var x=tmById(production.staffing,"STAFFING_ID",stId);if(!x)return'<div class="tm-muted">Removed.</div>';
+    var extras=x.DEPARTMENT==="Extras",ids=tmSplitIds(x.ASSIGNED_PERSON_IDS);
+    var h='<div class="tm-pop-head"><b>'+esc(x.ROLE)+'</b><span class="tm-muted">'+esc(x.DEPARTMENT)+'</span><button class="tm-more" onclick="tmPopClose()">✕</button></div>';
+    h+='<div class="tm-pop-label">'+(extras?'Description':'Role / character')+'</div><input class="tm-input" value="'+tmAttr(x.ROLE)+'" onkeydown="if(event.key===\'Enter\')this.blur()" onblur="tmPopSetStaff(\''+tmAttr(stId)+'\',\'ROLE\',this.value)">';
+    if(extras){
+      h+='<div class="tm-pop-label">How many</div><input class="tm-input" type="number" min="1" style="max-width:90px" value="'+tmAttr(tmNum(x.NEEDED,1))+'" onchange="tmPopSetStaff(\''+tmAttr(stId)+'\',\'NEEDED\',this.value)">';
+    }else{
+      var people=tmActivePeople();ids.forEach(function(id){if(!people.some(function(p){return p.PERSON_ID===id})&&tmPerson(id))people.push(tmPerson(id))});
+      h+='<div class="tm-pop-label">'+(x.DEPARTMENT==="Cast"?'Played by':'Who')+'</div><select class="tm-input" onchange="if(this.value===\'__new\'){tmPopNewPersonFor(\''+tmAttr(stId)+'\')}else tmPopSetStaff(\''+tmAttr(stId)+'\',\'ASSIGNED_PERSON_IDS\',this.value)"><option value=""'+(ids.length?'':' selected')+'>— no one yet —</option>'+people.map(function(p){return'<option value="'+tmAttr(p.PERSON_ID)+'"'+(ids[0]===p.PERSON_ID?' selected':'')+'>'+esc(p.NAME)+(p.ROLES_CHARACTERS?' · '+esc(p.ROLES_CHARACTERS):'')+'</option>'}).join("")+'<option value="__new">+ New person…</option></select>';
+    }
+    h+='<div class="tm-pop-actions"><button class="hbtn tm-danger" onclick="tmPopRemoveStaff(\''+tmAttr(stId)+'\',\''+tmAttr(uid)+'\');tmPopClose()">Remove from scene</button><span class="tm-spacer"></span>'+(ids.length?'<button class="hbtn" onclick="tmPopClose();openPersonEditor(\''+tmAttr(ids[0])+'\')">Person…</button>':'')+'</div>';
+    return h;
+  });
+}
+function tmPopSetStaff(stId,field,value){
+  var st=tmById(production.staffing,"STAFFING_ID",stId);if(!st)return;
+  if(field==="ROLE")value=String(value).trim();if(field==="NEEDED")value=Math.max(1,Number(value)||1);
+  if(String(st[field]===undefined||st[field]===null?"":st[field])===String(value))return;
+  var rec=Object.assign({},st);rec[field]=value;
+  var n=tmNum(rec.NEEDED,1),c=tmSplitIds(rec.ASSIGNED_PERSON_IDS).length;rec.CONFIRMED_COUNT=Math.min(n,c);rec.GAP=Math.max(0,n-c);
+  tmSaveStaffing(rec,function(){tmRefreshSceneRow(st.SCENE_UID);tmPopRender()});
+}
+function tmPopNewPersonFor(stId){
+  var st=tmById(production.staffing,"STAFFING_ID",stId);if(!st)return;
+  var name=prompt("New person's name:");if(!name||!name.trim())return;
+  var rec={PERSON_ID:tmNewPersonId(name.trim()),NAME:name.trim(),GROUPS:st.DEPARTMENT==="Cast"?"Cast":"Crew",ROLES_CHARACTERS:st.ROLE,PROJECT_STATUS:"Candidate",CONTRACT_STATUS:"Not Sent",ACTIVE:true,SOURCE_TABS:"Task Manager"};
+  tmSavePerson(rec);
+  tmPopSetStaff(stId,"ASSIGNED_PERSON_IDS",rec.PERSON_ID);
 }
 function tmMiniTask(t,viaItem){
   var st=tmStatus(t.STATUS_COLOR).toLowerCase();
@@ -409,25 +687,23 @@ function tmRenderPeople(){
   }).sort(function(a,b){return String(a.NAME).localeCompare(String(b.NAME))});
   var removed=production.people.filter(function(p){return !tmActive(p)}).length;
   var h='<div class="tm-todo-head"><div class="tm-filters">'+filters.map(function(f){return'<button class="tm-subtab small '+(tmPeopleFilter===f[0]?'active':'')+'" onclick="tmPeopleFilter=\''+f[0]+'\';renderTaskBody()">'+f[1]+'</button>'}).join("")+'</div><span class="tm-muted">'+rows.length+' people</span>'+(removed?'<label class="tm-muted tm-toggle"><input type="checkbox" '+(tmShowRemoved?'checked':'')+' onchange="tmShowRemoved=this.checked;renderTaskBody()"> show removed ('+removed+')</label>':'')+'<span class="tm-spacer"></span><button class="hbtn gold" onclick="openPersonEditor(null)">+ Add person</button></div>';
-  h+='<div class="tm-table-wrap tm-sheet"><table class="tm-table tm-people"><thead><tr><th class="tm-sticky">Name</th><th>Group</th><th>Role / character</th><th>Attachment</th><th>Contract</th><th>Ver.</th><th>Phone</th><th>Email</th><th>Scenes</th><th>Availability</th><th>Notes</th><th class="tm-col-more"></th></tr></thead><tbody>';
+  h+='<table class="tm-table tm-people"><thead><tr><th class="tm-col-name">Name</th><th class="tm-col-group">Group</th><th>Role / character</th><th class="tm-col-sel">Attachment</th><th class="tm-col-sel">Contract</th><th>Contact</th><th class="tm-col-num">Scenes</th><th>Availability</th><th>Notes</th><th class="tm-col-more"></th></tr></thead><tbody>';
   rows.forEach(function(p){
     var id=p.PERSON_ID,st=tmPersonState(p),sc=tmIx.staffByPerson[id]||[],active=tmActive(p);
     var seqs=[];sc.forEach(function(x){var s=tmScene(x.SCENE_UID);if(seqs.indexOf(s.seqLabel)<0)seqs.push(s.seqLabel)});
     h+='<tr class="tm-row'+(active?'':' removed')+'" data-person="'+tmAttr(id)+'">';
-    h+='<td class="tm-sticky tm-namecell"><span class="tm-chip st-'+st+'" draggable="true" ondragstart="tmStartDrag(event,\'Person\',\''+tmAttr(id)+'\')" title="Open"><i class="tm-dot '+st+'"></i><span class="tm-edit tm-inline" contenteditable="true" spellcheck="false" onclick="event.stopPropagation()" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'NAME\')">'+esc(p.NAME)+'</span></span>'+(active?'':'<div class="tm-faint">removed</div>')+'</td>';
+    h+='<td class="tm-namecell"><span class="tm-chip st-'+st+'" draggable="true" ondragstart="tmStartDrag(event,\'Person\',\''+tmAttr(id)+'\')" title="Open"><i class="tm-dot '+st+'"></i><span class="tm-edit tm-inline" contenteditable="true" spellcheck="false" onclick="event.stopPropagation()" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'NAME\')">'+esc(p.NAME)+'</span></span>'+(active?'':'<div class="tm-faint">removed</div>')+'</td>';
     h+='<td><select class="tm-mini-select" onchange="tmPatch(\'person\',\''+tmAttr(id)+'\',\'GROUPS\',this.value)">'+tmGroupOptions(p.GROUPS)+'</select></td>';
     h+='<td><div class="tm-edit" contenteditable="true" spellcheck="false" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'ROLES_CHARACTERS\')">'+esc(p.ROLES_CHARACTERS||"")+'</div></td>';
     h+='<td><select class="tm-mini-select" onchange="tmPatch(\'person\',\''+tmAttr(id)+'\',\'PROJECT_STATUS\',this.value)">'+TM_PROJECT.map(function(v){return'<option'+(p.PROJECT_STATUS===v?' selected':'')+'>'+v+'</option>'}).join("")+'</select></td>';
-    h+='<td><select class="tm-mini-select ct-'+st+'" onchange="tmPatch(\'person\',\''+tmAttr(id)+'\',\'CONTRACT_STATUS\',this.value)">'+TM_CONTRACT.map(function(v){return'<option value="'+v+'"'+((p.CONTRACT_STATUS||"")===v?' selected':'')+'>'+(v||"—")+'</option>'}).join("")+'</select></td>';
-    h+='<td><div class="tm-edit tm-narrow" contenteditable="true" spellcheck="false" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'CONTRACT_VERSION\')">'+esc(p.CONTRACT_VERSION||"")+'</div></td>';
-    h+='<td><div class="tm-edit tm-narrow" contenteditable="true" spellcheck="false" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'PHONE\')">'+esc(p.PHONE||"")+'</div></td>';
-    h+='<td><div class="tm-edit" contenteditable="true" spellcheck="false" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'EMAIL\')">'+esc(p.EMAIL||"")+'</div></td>';
-    h+='<td class="tm-muted" title="'+tmAttr(seqs.join(", "))+'">'+(seqs.length?seqs.length+' <span class="tm-faint">'+esc(seqs.slice(0,4).join(", "))+(seqs.length>4?'…':'')+'</span>':'—')+'</td>';
+    h+='<td><select class="tm-mini-select ct-'+st+'" onchange="tmPatch(\'person\',\''+tmAttr(id)+'\',\'CONTRACT_STATUS\',this.value)">'+TM_CONTRACT.map(function(v){return'<option value="'+v+'"'+((p.CONTRACT_STATUS||"")===v?' selected':'')+'>'+(v||"—")+'</option>'}).join("")+'</select><div class="tm-edit tm-sub" contenteditable="true" spellcheck="false" data-ph="version" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'CONTRACT_VERSION\')">'+esc(p.CONTRACT_VERSION||"")+'</div></td>';
+    h+='<td><div class="tm-edit tm-sub" contenteditable="true" spellcheck="false" data-ph="phone" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'PHONE\')">'+esc(p.PHONE||"")+'</div><div class="tm-edit tm-sub" contenteditable="true" spellcheck="false" data-ph="email" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'EMAIL\')">'+esc(p.EMAIL||"")+'</div></td>';
+    h+='<td class="tm-muted tm-col-num" title="'+tmAttr(seqs.join(", "))+'">'+(seqs.length?seqs.length:'—')+'</td>';
     h+='<td class="tm-wide"><div class="tm-edit" contenteditable="true" spellcheck="false" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'AVAILABILITY\')">'+esc(p.AVAILABILITY||"")+'</div></td>';
     h+='<td class="tm-wide"><div class="tm-edit" contenteditable="true" spellcheck="false" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'NOTES\')">'+esc(p.NOTES||"")+'</div></td>';
     h+='<td class="tm-col-more"><button class="tm-more" title="Open · replace · remove" onclick="openPersonEditor(\''+tmAttr(id)+'\')">⋯</button></td></tr>';
   });
-  h+='</tbody></table></div>';
+  h+='</tbody></table>';
   if(!rows.length)h+='<div class="tm-empty">No one matches this filter.</div>';
   return h;
 }
@@ -443,8 +719,8 @@ function tmGroupOptions(current){
 // ── modals ───────────────────────────────────────────────────
 function tmStatusButtons(current,prefix){return'<div class="tm-statuses">'+TM_STATUSES.map(function(s){return'<button type="button" class="tm-status '+(current===s?'active':'')+'" data-status="'+s+'" onclick="tmChooseStatus(\''+prefix+'\',\''+s+'\')">'+s+'</button>'}).join("")+'</div><input type="hidden" id="'+prefix+'" value="'+tmAttr(current)+'">'}
 function tmChooseStatus(prefix,status){document.getElementById(prefix).value=status;var root=document.getElementById(prefix).previousElementSibling;Array.prototype.forEach.call(root.children,function(b){b.classList.toggle("active",b.dataset.status===status)})}
-function tmClose(){var m=document.getElementById("tmModalMount");if(m)m.parentNode.removeChild(m)}
-function tmModal(html){tmClose();var d=document.createElement("div");d.id="tmModalMount";d.innerHTML='<div class="tm-modal-bg" onclick="tmClose()"><div class="tm-modal" onclick="event.stopPropagation()">'+html+'</div></div>';document.body.appendChild(d)}
+function tmClose(){var m=document.getElementById("tmModalMount");if(m)m.parentNode.removeChild(m);if(window.tmPopClose)tmPopClose()}
+function tmModal(html){tmClose();var d=document.createElement("div");d.id="tmModalMount";d.innerHTML='<div class="tm-modal-bg" onclick="tmClose()"><div class="tm-modal" onclick="event.stopPropagation();if(window.tmPopClose)tmPopClose()">'+html+'</div></div>';document.body.appendChild(d)}
 function tmVal(id){var el=document.getElementById(id);return el?el.value.trim():""}
 function tmChecked(id){var el=document.getElementById(id);return !!(el&&el.checked)}
 function tmSelect(id,options,current,labels){return'<select class="tm-input" id="'+id+'">'+options.map(function(v,i){return'<option value="'+tmAttr(v)+'"'+(String(current||"")===String(v)?' selected':'')+'>'+esc(labels?labels[i]:(v||"—"))+'</option>'}).join("")+'</select>'}
@@ -480,29 +756,25 @@ function saveItemEditor(id){
   if(item.TYPE==="Location")record.ADDRESS=tmVal("itemAddress");
   var reqJobs=(tmIx.reqsByItem[id]||[]).filter(function(r){return String(r.STATUS_OVERRIDE||"")!==tmVal("req-"+r.REQUIREMENT_ID)||String(r.NOTES||"")!==tmVal("reqn-"+r.REQUIREMENT_ID)}).map(function(r){return Object.assign({},r,{STATUS_OVERRIDE:tmVal("req-"+r.REQUIREMENT_ID),NOTES:tmVal("reqn-"+r.REQUIREMENT_ID)})});
   tmClose();
-  tmSaveItem(record).then(function(r){
-    if(r&&r.error)return;
-    renderTaskBody();
-    // scene overrides are separate rows; write only the ones that changed, in sequence
-    var chain=Promise.resolve();
-    reqJobs.forEach(function(rec){chain=chain.then(function(){return tmSaveRequirement(rec)})});
-    chain.then(function(){if(reqJobs.length)renderTaskBody()});
-  });
+  tmSaveItem(record,renderTaskBody);
+  // scene overrides are separate rows; write only the ones that changed
+  reqJobs.forEach(function(rec){tmSaveRequirement(rec,renderTaskBody)});
 }
 
 /** Scene panel: what this one sequence needs, who is in it, and its scene-only notes. */
 function openSceneProduction(uid){
   var s=tmScene(uid),reqs=tmIx.reqsByScene[uid]||[],staff=tmIx.staffByScene[uid]||[],notes=production.notes.filter(function(n){return n.SCOPE_TYPE==="Scene"&&n.SCOPE_ID===uid&&!tmBool(n.RESOLVED)}),tasks=tmIx.tasksByScene[uid]||[];
-  var h='<h2>'+esc(s.seqLabel||s.seq)+' — '+esc(s.title)+'</h2><div class="tm-modal-sub">'+(s.shootDay?'Shoots '+esc(tmFmtDate(s.shootDay)):'Unscheduled')+' · '+reqs.length+' requirements · '+staff.length+' roles</div>';
-  h+='<div class="tm-field"><label>Requirements — click to edit the master record</label><div class="tm-chips">'+(reqs.length?reqs.map(function(r){return tmItemChip(tmIx.items[r.ITEM_ID],r)}).join(""):'<span class="tm-muted">None recorded</span>')+'</div></div>';
-  h+='<div class="tm-field"><label>Cast &amp; crew</label><div class="tm-chips">'+staff.map(tmStaffChip).join("")+'<button class="tm-chip-add" onclick="openStaffingEditor(null,\''+tmAttr(uid)+'\')">+ need</button></div></div>';
-  h+='<div class="tm-field"><label>Tasks</label><div class="tm-chips">'+tasks.map(function(t){return tmMiniTask(t,false)}).join("")+'<button class="tm-chip-add" onclick="tmClose();openTaskEditor(null,{type:\'Scene\',id:\''+tmAttr(uid)+'\'})">+ task</button></div></div>';
+  var h='<h2>'+esc(s.seqLabel||s.seq)+' — '+esc(s.title)+'</h2><div class="tm-modal-sub">'+(s.shootDay?'Shoots '+esc(tmFmtDate(s.shootDay)):'Unscheduled')+' · '+reqs.length+' requirements · '+staff.length+' roles'+(s.shortSummary?'<div class="tm-summary-text">'+esc(s.shortSummary)+'</div>':'')+'</div>';
+  h+='<div class="tm-scene-grid" data-scene-modal="'+tmAttr(uid)+'">';
+  TM_CELLS.forEach(function(c){h+='<div class="tm-field"><label>'+esc(c.label)+'</label><div class="tm-chips" data-cell="'+c.key+'">'+tmCellChips(uid,c)+'</div></div>'});
+  h+='</div>';
+  h+='<div class="tm-field"><label>Tasks</label><div class="tm-chips">'+tasks.map(function(t){return tmMiniTask(t,false)}).join("")+'<button class="tm-plus" onclick="tmClose();openTaskEditor(null,{type:\'Scene\',id:\''+tmAttr(uid)+'\'})">+</button></div></div>';
   h+='<div class="tm-field"><label>Scene-only notes</label>'+notes.map(function(n){return'<div class="tm-scene-link"><b>'+esc(n.CATEGORY||"Note")+'</b> '+esc(n.BODY)+' <button class="tm-more" title="Resolve" onclick="tmResolveNote(\''+tmAttr(n.NOTE_ID)+'\',\''+tmAttr(uid)+'\')">✓</button></div>'}).join("");
   h+='<div class="tm-pair" style="margin-top:6px"><select class="tm-input" id="sceneNoteCategory" style="max-width:130px"><option>Logistics</option><option>Creative</option><option>Safety</option><option>Schedule</option><option>General</option></select><input class="tm-input" id="sceneNoteBody" placeholder="Add a note that belongs only to this scene" onkeydown="if(event.key===\'Enter\')saveSceneNote(\''+tmAttr(uid)+'\')"><button class="hbtn gold" onclick="saveSceneNote(\''+tmAttr(uid)+'\')">Add</button></div></div>';
   h+='<div class="tm-actions"><button class="mbtn ghost" onclick="tmClose()">Close</button></div>';tmModal(h);
 }
-function saveSceneNote(uid){var body=tmVal("sceneNoteBody");if(!body){toast("Write the note first","err");return}tmSaveNote({NOTE_ID:"",SCOPE_TYPE:"Scene",SCOPE_ID:uid,CATEGORY:tmVal("sceneNoteCategory")||"General",BODY:body,PINNED:false,RESOLVED:false,SOURCE:"Task Manager"}).then(function(r){if(r&&!r.error)openSceneProduction(uid)})}
-function tmResolveNote(id,uid){var n=tmById(production.notes,"NOTE_ID",id);if(!n)return;tmSaveNote(Object.assign({},n,{RESOLVED:true})).then(function(r){if(r&&!r.error)openSceneProduction(uid)})}
+function saveSceneNote(uid){var body=tmVal("sceneNoteBody");if(!body){toast("Write the note first","err");return}tmSaveNote({NOTE_ID:"",SCOPE_TYPE:"Scene",SCOPE_ID:uid,CATEGORY:tmVal("sceneNoteCategory")||"General",BODY:body,PINNED:false,RESOLVED:false,SOURCE:"Task Manager"},function(){if(document.querySelector('.tm-scene-grid[data-scene-modal="'+uid+'"]'))openSceneProduction(uid)})}
+function tmResolveNote(id,uid){var n=tmById(production.notes,"NOTE_ID",id);if(!n)return;tmSaveNote(Object.assign({},n,{RESOLVED:true}),function(){if(document.querySelector('.tm-scene-grid[data-scene-modal="'+uid+'"]'))openSceneProduction(uid)})}
 
 function openStaffingEditor(id,uid){
   var st=id?tmById(production.staffing,"STAFFING_ID",id):null,s=tmScene(uid);
@@ -522,7 +794,8 @@ function saveStaffingEditor(id,uid,seq){
   var people=Array.prototype.filter.call(document.querySelectorAll(".staffPerson"),function(c){return c.checked}).map(function(c){return c.value});
   var record={STAFFING_ID:id,SCENE_UID:uid,SEQ:seq,DEPARTMENT:tmVal("staffDept")||"Crew",ROLE:tmVal("staffRole"),NEEDED:needed,ASSIGNED_PERSON_IDS:people.join("; "),CONFIRMED_COUNT:confirmed,GAP:Math.max(0,needed-confirmed),NOTES:tmVal("staffNotes")};
   if(!record.ROLE){toast("Give the role a name","err");return}
-  tmSaveStaffing(record).then(function(r){if(r&&r.error)return;renderTaskBody();openSceneProduction(uid)});
+  tmSaveStaffing(record,function(){renderTaskBody();if(document.querySelector('.tm-scene-grid[data-scene-modal="'+uid+'"]'))openSceneProduction(uid)});
+  openSceneProduction(uid);
 }
 
 /** Existing person, or a blank form when id is null. */
@@ -559,7 +832,7 @@ function savePersonEditor(id){
   var record=tmReadPersonForm(p);
   if(!record.NAME){toast("The person needs a name","err");return}
   if(!id)record.PERSON_ID=tmNewPersonId(record.NAME);
-  tmClose();tmSavePerson(record).then(function(r){if(r&&!r.error){renderTaskBody();if(!id)toast(record.NAME+" added","ok")}});
+  tmClose();tmSavePerson(record,renderTaskBody);if(!id)toast(record.NAME+" added","ok");
 }
 
 /** Soft removal: the row stays in the sheet, marked Released and inactive, and
@@ -577,7 +850,7 @@ function tmRemovePerson(id){
 }
 function tmRestorePerson(id){
   var p=tmPerson(id);if(!p)return;tmClose();
-  tmSavePerson(Object.assign({},p,{ACTIVE:true,PROJECT_STATUS:p.PROJECT_STATUS==="Released"?"Listed":p.PROJECT_STATUS})).then(function(r){if(r&&!r.error){renderTaskBody();toast(p.NAME+" restored","ok")}});
+  tmSavePerson(Object.assign({},p,{ACTIVE:true,PROJECT_STATUS:p.PROJECT_STATUS==="Released"?"Listed":p.PROJECT_STATUS}),renderTaskBody);toast(p.NAME+" restored","ok");
 }
 
 /** Recast: every scene role held by `oldId` goes to an existing person or a new
@@ -706,11 +979,11 @@ function saveTaskEditor(id){
   var record=Object.assign({},current,{TASK_ID:id,TITLE:tmVal("taskTitle"),STATUS_COLOR:tmVal("taskStatus"),DONE:tmChecked("taskDone"),TASK_TYPE:type,ASSIGNEE_IDS:tmVal("taskAssignee"),SCOPE_TYPE:scopeType,SCOPE_ID:scopeId,SCENE_UID:sceneId,ITEM_ID:itemId,PERSON_ID:personId,DUE_DATE:tmVal("taskDue"),DUE_NOTE:tmVal("taskDueNote"),MANUAL_ORDER:current.MANUAL_ORDER||production.tasks.length+1,NOTES:tmVal("taskNotes")});
   if(record.DONE&&!id)record.STATUS_COLOR="Green";
   if(!record.TITLE){toast("Task needs a title","err");return}
-  tmClose();tmSaveTask(record).then(function(r){if(r&&!r.error)renderTaskBody()});
+  tmClose();tmSaveTask(record,renderTaskBody);
 }
 function deleteTaskEditor(id){
   if(!confirm("Delete this task?"))return;
-  tmClose();tmSave({action:"deleteTask",id:id}).then(function(r){if(r&&!r.error){tmRemove(production.tasks,"TASK_ID",id);renderTaskBody()}});
+  tmClose();tmOptimisticDelete("task",id,"deleteTask",renderTaskBody);
 }
 
 updateToday();setInterval(updateToday,60000);

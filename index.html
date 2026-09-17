@@ -17,7 +17,18 @@ button,input,textarea,select{font-family:inherit}
 .hbtn.gold{border-color:#c49b2a66;background:#c49b2a22;color:#e8d5a0;font-weight:600}
 .hbtn.live{border-color:rgba(74,158,110,.35);color:#4a9e6e}
 .hbtn.live.busy{color:#c49b2a;border-color:#c49b2a55}
-.main{display:flex;height:calc(100vh - 56px)}
+/* ═══ HEADER LINKS ═══ */
+.links-bar{flex-basis:100%;display:flex;align-items:center;gap:6px 18px;flex-wrap:wrap;padding-top:8px;margin-top:2px;border-top:1px solid #2a2520;font-size:11px}
+.links-bar a{color:#c9b896;text-decoration:none;display:inline-flex;align-items:center;gap:6px;padding:2px 0;border-bottom:1px solid transparent}
+.links-bar a:hover{color:#e8d5a0;border-bottom-color:#c49b2a88}
+.links-bar a .lk-ico{color:#c49b2a;font-size:10px}
+.links-bar .lk-edit{margin-left:auto;border:1px dashed #3a342e;background:none;color:#8a7e72;border-radius:5px;padding:2px 8px;font-size:10px;cursor:pointer}
+.links-bar .lk-edit:hover{border-color:#c49b2a;color:#e8d5a0}
+.lk-row{display:grid;grid-template-columns:150px 1fr 28px;gap:6px;margin-bottom:6px;align-items:center}
+.lk-row input{padding:7px 9px;border-radius:5px;border:1px solid #3a342e;background:#141210;color:#e8e0d6;font-size:12px;outline:none;width:100%}
+.lk-row .lk-del{border:1px solid rgba(201,64,64,.27);background:rgba(201,64,64,.07);color:#c94040;border-radius:4px;cursor:pointer;height:30px}
+@media(max-width:900px){.links-bar{gap:4px 12px;padding-top:6px}.lk-row{grid-template-columns:1fr 28px}.lk-row input:first-child{grid-column:1/-1}}
+.main{display:flex;height:calc(100vh - var(--hdr,56px))}
 .left{width:260px;min-width:260px;border-right:1px solid #2a2520;overflow-y:auto;padding:12px;background:#18150f}
 .left-title{font-size:10px;color:#8a7e72;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:600}
 .sort-sel{width:100%;margin-bottom:8px;padding:5px 8px;border-radius:5px;border:1px solid #3a342e;background:#141210;color:#a09585;font-size:11px;outline:none;cursor:pointer}
@@ -58,6 +69,33 @@ button,input,textarea,select{font-family:inherit}
 /* highlight states */
 .mini-chip.hl-on{filter:saturate(1.6) brightness(1.25);box-shadow:0 0 0 1px currentColor inset,0 0 8px -2px currentColor;font-weight:600}
 .mini-chip.hl-off{opacity:.2;filter:grayscale(1)}
+/* ═══ COMPLETION: shot = faded yellow, pickup = purple ═══ */
+.chip.done,.mini-chip.done,.sc-card.done{background:rgba(232,213,160,.13)!important;border-color:rgba(232,213,160,.35)!important;color:#b8ab84!important}
+.chip.done{border-left-color:#d9c98f!important;opacity:.78}
+.chip.done .name{color:#b8ab84}
+.chip.done .tags span{opacity:.6}
+.mini-chip.done{border-left-color:#d9c98f!important;opacity:.7}
+.sc-card.done .sc-name,.sc-card.done .sc-slug{color:#a89c78}
+.sc-card.done .sc-seq{opacity:.6}
+.chip.pickup,.mini-chip.pickup,.sc-card.pickup{box-shadow:inset 3px 0 0 #9b7bff,0 0 0 1px rgba(155,123,255,.35)}
+.chip.pickup{border-color:rgba(155,123,255,.5)!important}
+.pk-tag{display:inline-block;font-size:8px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;background:rgba(155,123,255,.18);color:#c9b8ff;border:1px solid rgba(155,123,255,.4);border-radius:8px;padding:1px 6px;margin-left:6px;vertical-align:middle}
+.pk-note{background:rgba(155,123,255,.1);border:1px solid rgba(155,123,255,.35);border-left:3px solid #9b7bff;border-radius:5px;padding:7px 9px;font-size:11px;color:#d8ccff;margin-bottom:8px;line-height:1.5}
+.pk-note b{color:#c9b8ff}
+.flag-acts{float:right;display:inline-flex;gap:3px;margin-left:6px}
+.fa{width:18px;height:18px;border-radius:9px;border:1px solid #3a342e;background:#141210;color:#6a5e52;font-size:10px;line-height:1;cursor:pointer;padding:0;opacity:.45;transition:opacity .12s}
+.chip:hover .fa,.sc-h:hover .fa,.fa.on{opacity:1}
+.fa:hover{border-color:#c49b2a;color:#e8d5a0}
+.fa.on{background:#e8d5a0;border-color:#e8d5a0;color:#1a1714}
+.fa.pk:hover{border-color:#9b7bff;color:#c9b8ff}
+.fa.pk.on{background:#9b7bff;border-color:#9b7bff;color:#15102a}
+.sc-h .flag-acts{float:none;align-self:center}
+.cal-day.alldone{background:rgba(232,213,160,.07);border-color:rgba(232,213,160,.3)}
+.cal-day.alldone .dnum span{color:#b8ab84}
+.badge.done-badge{background:rgba(232,213,160,.2);color:#e8d5a0}
+.tog.cmp-shot.pos{border-color:#e8d5a0;background:rgba(232,213,160,.18);color:#e8d5a0}
+.tog.cmp-pk.pos{border-color:#9b7bff;background:rgba(155,123,255,.18);color:#c9b8ff}
+@media print{.flag-acts{display:none}}
 .cal-day.hl-dim{opacity:.55}
 .cal-day.hl-hit{border-color:#c49b2a55}
 .dnum .hl-count{font-size:7px;padding:1px 4px;border-radius:8px;font-weight:700;background:#c49b2a33;color:#e8d5a0;margin-left:3px}
@@ -189,7 +227,7 @@ button,input,textarea,select{font-family:inherit}
   .header .sub{font-size:8px;letter-spacing:1.2px}
   .hbtn{padding:8px 11px;font-size:12px}
 
-  .main{height:calc(100vh - 52px)}
+  .main{height:calc(100vh - var(--hdr,52px))}
 
   /* sidebar becomes a slide-in drawer */
   .left{position:fixed;left:0;top:0;bottom:0;width:82%;max-width:320px;z-index:800;
@@ -267,6 +305,7 @@ button,input,textarea,select{font-family:inherit}
     <button class="hbtn" onclick="openSettings()">&#9881; Settings</button>
     <button class="hbtn gold" id="newSceneBtn" style="display:none" onclick="openEditor(null)">+ New Scene</button>
   </div>
+  <div class="links-bar" id="linksBar"></div>
 </div>
 <div class="sb-backdrop" id="sbBackdrop" onclick="toggleSidebar()"></div>
 <div class="main" id="schedulerPage">
@@ -469,6 +508,7 @@ function applyLock(){
     b.title=canEdit()?"Click to return to view only":"Click to enter the edit code";
   }
   if(n)n.style.display=canEdit()?"":"none";
+  if(window.renderLinks)renderLinks();
   if(window.syncProductionLock)window.syncProductionLock();
 }
 function setLive(busy){
@@ -493,6 +533,7 @@ function loadFromSheet(quiet){
     settings=data.settings||{};
     rev=data.rev;
     buildCatList(data.cats||{},data.order||[]);
+    renderLinks();
 
     if(data.rosterAdded)toast(data.rosterAdded+" new value(s) added to Rosters","info");
     else if(!quiet)toast("Loaded "+scenes.length+" scenes","ok");
@@ -566,6 +607,99 @@ function saveDayMeta(k,d){
   return apiWrite({action:"saveDay",day:{date:k,label:d.label,call:d.call,wrap:d.wrap,notes:d.notes}})
     .then(function(r){if(r&&r.error)toast("Save failed: "+r.error,"err")});
 }
+// ── HEADER LINKS ─────────────────────────────────────────────
+/* Four plain links in the header, on both tabs. Stored on the Settings tab as
+   Key "links" / Value JSON, so anyone with the edit code can change them here.
+   Until that row exists the defaults below are shown. */
+var DEFAULT_LINKS=[
+  {label:"Discord",url:"https://discord.gg/VNzjyStk4M"},
+  {label:"Screenplay — Gold Draft",url:"https://docs.google.com/document/d/1ZviVWsInfCJaPM9j5vrOGACUVQz4ctMl/edit?usp=sharing&ouid=108991167053288064619&rtpof=true&sd=true"},
+  {label:"Schedule",url:"https://wubbawaterbottle.github.io/Hairpin-Scheduler/"},
+  {label:"Producer Google Drive",url:"https://drive.google.com/drive/folders/19FqLBXFV1nWAWVKBkoHXIrPQQEnu-rEn?usp=sharing"}
+];
+function currentLinks(){
+  try{var v=settings&&settings.links?JSON.parse(settings.links):null;if(v&&v.length)return v.filter(function(l){return l&&l.url})}catch(e){}
+  return DEFAULT_LINKS;
+}
+function safeHref(u){u=String(u||"").trim();if(!/^https?:\/\//i.test(u))u="https://"+u;return u}
+function renderLinks(){
+  var el=document.getElementById("linksBar");if(!el)return;
+  var links=currentLinks(),h="";
+  for(var i=0;i<links.length;i++)h+='<a href="'+esc(safeHref(links[i].url))+'" target="_blank" rel="noopener"><span class="lk-ico">&#8599;</span>'+esc(links[i].label||links[i].url)+'</a>';
+  if(canEdit())h+='<button class="lk-edit" onclick="openLinksEditor()" title="Change these links">&#9998; Edit links</button>';
+  el.innerHTML=h;
+  fitHeader();
+}
+/* The pages below size themselves to the real header height (links bar included). */
+function fitHeader(){var hd=document.querySelector(".header");if(hd)document.documentElement.style.setProperty("--hdr",hd.offsetHeight+"px")}
+window.addEventListener("resize",fitHeader);
+var _lk=null;
+function openLinksEditor(){
+  if(!canEdit()){promptEditKey(openLinksEditor);return}
+  _lk=JSON.parse(JSON.stringify(currentLinks()));renderLinksEditor();
+}
+function renderLinksEditor(){
+  var h='<div class="modal-bg" onclick="closeModal()"><div class="modal" onclick="event.stopPropagation()"><h2>Header links</h2>';
+  h+='<div style="font-size:11px;color:#8a7e72;margin-bottom:12px;line-height:1.6">Shown at the top of both tabs for everyone. Saved to the Settings tab of the sheet.</div>';
+  for(var i=0;i<_lk.length;i++){
+    h+='<div class="lk-row"><input placeholder="Label" value="'+esc(_lk[i].label||"")+'" oninput="_lk['+i+'].label=this.value">';
+    h+='<input placeholder="https://…" value="'+esc(_lk[i].url||"")+'" oninput="_lk['+i+'].url=this.value">';
+    h+='<button class="lk-del" title="Remove" onclick="_lk.splice('+i+',1);renderLinksEditor()">&#10005;</button></div>';
+  }
+  h+='<button class="hbtn" style="margin-top:4px" onclick="_lk.push({label:\'\',url:\'\'});renderLinksEditor()">+ Add a link</button>';
+  h+='<div style="display:flex;gap:8px;margin-top:16px"><button class="mbtn gold" onclick="saveLinks()">Save</button><button class="mbtn ghost" onclick="closeModal()">Cancel</button>';
+  h+='<button class="mbtn ghost" style="margin-left:auto" onclick="_lk=JSON.parse(JSON.stringify(DEFAULT_LINKS));renderLinksEditor()">Reset to defaults</button></div></div></div>';
+  document.getElementById("modalMount").innerHTML=h;
+}
+function saveLinks(){
+  var clean=[];for(var i=0;i<_lk.length;i++){var u=String(_lk[i].url||"").trim();if(!u)continue;clean.push({label:String(_lk[i].label||"").trim()||u,url:u})}
+  var json=JSON.stringify(clean),prev=settings.links;
+  settings.links=json;renderLinks();closeModal();
+  apiWrite({action:"saveSetting",key:"links",value:json}).then(function(r){
+    if(r&&r.error){settings.links=prev;renderLinks();toast(/Unknown write action/i.test(r.error)?"Saving links needs the new Code.gs — deployment steps, Part 1":"Links not saved: "+r.error,"err")}
+    else toast("Links saved","ok");
+  });
+}
+
+// ── COMPLETION: Shot / Pickup ────────────────────────────────
+/* Both live in the sheet's STATUS column (roster category "status"). "Shot" means
+   the scene is in the can; "Pickup" means shot but something still owed. The
+   pickup note is a "Pickup: ..." line inside SCHED NOTES, so it stays visible in
+   the sheet next to the scene. */
+var SHOT="Shot",PICKUP="Pickup";
+function isShot(s){return (s.status||[]).indexOf(SHOT)>=0}
+function needsPickup(s){return (s.status||[]).indexOf(PICKUP)>=0}
+function splitNotes(notes){
+  var lines=String(notes||"").split(/\r?\n/),pk=[],rest=[];
+  for(var i=0;i<lines.length;i++){if(/^\s*pickup\s*:/i.test(lines[i]))pk.push(lines[i].replace(/^\s*pickup\s*:\s*/i,""));else rest.push(lines[i])}
+  return {pickup:pk.join(" ").trim(),notes:rest.join("\n").trim()};
+}
+function joinNotes(notes,pickup){var out=[];if(notes)out.push(notes);if(pickup)out.push("Pickup: "+String(pickup).replace(/\s*\n\s*/g," ").trim());return out.join("\n")}
+function pickupNote(s){return splitNotes(s.notes).pickup}
+/** Makes sure the roster category has the value, so highlight and editor rows show it. */
+function ensureStatusOption(val){var cat=getCat("status");if(cat&&cat.options.indexOf(val)<0){cat.options.push(val);if(cat.meta)cat.meta[val]={color:"",note:"",aliases:[]}}}
+/** One-click toggle from a chip or call sheet. Writes only the STATUS cell. */
+function toggleFlag(uid,flag){
+  var s=getScene(uid);if(!s)return;
+  if(!canEdit()){promptEditKey();return}
+  if(!s.status)s.status=[];
+  var i=s.status.indexOf(flag);
+  if(i>=0)s.status.splice(i,1);else s.status.push(flag);
+  ensureStatusOption(flag);
+  render();
+  if(window.tmOnSceneFlag)tmOnSceneFlag(uid);   // Task Manager shows the same flag
+  saveSceneFields(s,{"STATUS":s.status},null).then(function(){toast(flag===SHOT?(isShot(s)?"Marked shot":"Back to unshot"):(needsPickup(s)?"Pickup flagged":"Pickup cleared"),"ok")});
+}
+/** The two small buttons that appear on chips and scene cards. */
+function flagButtons(s){
+  if(!canEdit())return"";
+  return'<span class="flag-acts">'+
+    '<button class="fa'+(isShot(s)?' on':'')+'" title="'+(isShot(s)?'Shot — click to unmark':'Mark as shot')+'" onclick="event.stopPropagation();toggleFlag(\''+s.uid+'\',SHOT)">&#10003;</button>'+
+    '<button class="fa pk'+(needsPickup(s)?' on':'')+'" title="'+(needsPickup(s)?'Pickup owed'+(pickupNote(s)?': '+esc(pickupNote(s)):'')+' — click to clear':'Flag a pickup')+'" onclick="event.stopPropagation();toggleFlag(\''+s.uid+'\',PICKUP)">&#9685;</button></span>';
+}
+function flagClasses(s){return (isShot(s)?" done":"")+(needsPickup(s)?" pickup":"")}
+function pickupTag(s){return needsPickup(s)?'<span class="pk-tag" title="'+esc(pickupNote(s)||"Pickup owed")+'">pickup</span>':''}
+
 /** Loose match, mirroring normKey() in the Apps Script. */
 function nk(s){
   return String(s||"").toUpperCase().replace(/’/g,"'").replace(/\([^)]*\)/g," ")
@@ -622,10 +756,10 @@ function sortFn(mode){
 }
 
 function chipHTML(s,dateLabel){
-  var cls="chip";
+  var cls="chip"+flagClasses(s);
   if(hlActive())cls+=hlMatch(s)?" hl-on":" hl-off";
   var h='<div class="'+cls+'" draggable="'+(canEdit()?'true':'false')+'" ondragstart="startDrag(\''+s.uid+'\')" onclick="openEditor(\''+s.uid+'\')" style="background:linear-gradient(135deg,'+CC[s.complexity]+'22,'+CC[s.complexity]+'11);border:1.5px solid '+CC[s.complexity]+'55;border-left:4px solid '+CC[s.complexity]+'">';
-  h+='<div class="name">'+(dateLabel?'<span class="cdate">'+dateLabel+'</span>':'')+esc(s.name)+'</div><div class="tags">';
+  h+='<div class="name">'+(dateLabel?'<span class="cdate">'+dateLabel+'</span>':'')+flagButtons(s)+esc(s.name)+pickupTag(s)+'</div><div class="tags">';
   for(var j=0;j<(s.cast||[]).length;j++)h+='<span>'+esc(s.cast[j])+'</span>';
   for(var j=0;j<(s.timeOfDay||[]).length;j++)h+='<span class="tod">'+esc(s.timeOfDay[j])+'</span>';
   return h+'</div></div>';
@@ -664,6 +798,8 @@ function renderLeft(){
 
   h+='<div class="legend"><div class="lg-title">Complexity</div>';
   for(var n=1;n<=5;n++)h+='<div class="lg-item"><div class="lg-dot" style="background:'+CC[n]+'"></div><div class="lg-label">'+CL[n]+'</div></div>';
+  h+='<div class="lg-item" style="margin-top:6px"><div class="lg-dot" style="background:#e8d5a0"></div><div class="lg-label">&#10003; Shot — faded</div></div>';
+  h+='<div class="lg-item"><div class="lg-dot" style="background:#9b7bff"></div><div class="lg-label">&#9685; Pickup owed</div></div>';
   h+='</div>';
   el.innerHTML=h;
   applySidebar();
@@ -781,29 +917,34 @@ function renderCal(){
     }
     var cls="cal-day"+(sel?" sel":"")+(we?" we":"");
     if(HLON)cls+=hitCount?" hl-hit":" hl-dim";
+    var shotN=0,pkN=0;for(var j=0;j<ds.length;j++){if(isShot(ds[j]))shotN++;if(needsPickup(ds[j]))pkN++}
+    if(ds.length&&shotN===ds.length)cls+=" alldone";
 
     h+='<div class="'+cls+'" onclick="selectDay('+d+')" ondragover="event.preventDefault()" ondrop="dropOnDay(event,'+d+')">';
     h+='<div class="dnum"><span>'+d+'</span>';
     if(HLON&&hitCount)h+='<span class="hl-count">'+hitCount+'</span>';
+    else if(ds.length&&shotN===ds.length)h+='<span class="badge done-badge" title="Every scene this day is shot">&#10003; shot'+(pkN?' · '+pkN+' pickup':'')+'</span>';
     else if(ds.length){
       var over=mins>warnMin;
-      h+='<span class="badge" style="background:'+(over?'#c9404033':'#c49b2a22')+';color:'+(over?'#e8a0a0':'#c49b2a')+'">'+(mins?fmtMin(mins):ds.length+"s")+'</span>';
+      h+='<span class="badge" style="background:'+(over?'#c9404033':'#c49b2a22')+';color:'+(over?'#e8a0a0':'#c49b2a')+'">'+(mins?fmtMin(mins):ds.length+"s")+(shotN?' · '+shotN+'&#10003;':'')+'</span>';
     }
     h+='</div>';
     for(var j=0;j<Math.min(ds.length,4);j++){
-      var s=ds[j],mc="mini-chip";
+      var s=ds[j],mc="mini-chip"+flagClasses(s);
       if(HLON)mc+=hlMatch(s)?" hl-on":" hl-off";
-      h+='<div class="'+mc+'" draggable="'+(canEdit()?'true':'false')+'" ondragstart="event.stopPropagation();startDrag(\''+s.uid+'\')" style="background:'+CC[s.complexity]+'22;border-left:2px solid '+CC[s.complexity]+';color:'+CC[s.complexity]+'">'+esc(s.name)+'</div>';
+      h+='<div class="'+mc+'" title="'+esc(s.name)+(isShot(s)?' — shot':'')+(needsPickup(s)?' — pickup: '+esc(pickupNote(s)||'owed'):'')+'" draggable="'+(canEdit()?'true':'false')+'" ondragstart="event.stopPropagation();startDrag(\''+s.uid+'\')" style="background:'+CC[s.complexity]+'22;border-left:2px solid '+CC[s.complexity]+';color:'+CC[s.complexity]+'">'+(isShot(s)?'&#10003; ':'')+esc(s.name)+'</div>';
     }
     if(ds.length>4)h+='<div style="font-size:8px;color:#6a5e52;text-align:center">+'+(ds.length-4)+'</div>';
     if(ds.length&&dayUnlocked(ds))h+='<div class="warn" title="A location on this day is not confirmed">&#9888;</div>';
     h+='</div>';
   }
   h+='</div><div class="stats">';
+  var shotCount=0,pkCount=0;for(var i=0;i<scenes.length;i++){if(isShot(scenes[i]))shotCount++;if(needsPickup(scenes[i]))pkCount++}
   var arr=[{v:shootDates().length,l:"Shoot Days",c:"#e8d5a0"},
            {v:schedCount,l:"Scheduled",c:"#e8d5a0"},
-           {v:unschedCount,l:"Remaining",c:unschedCount?"#c49b2a":"#4a9e6e"},
-           {v:scenes.length,l:"Total",c:"#e8d5a0"}];
+           {v:unschedCount,l:"Unscheduled",c:unschedCount?"#c49b2a":"#4a9e6e"},
+           {v:shotCount+" / "+scenes.length,l:"Shot",c:shotCount===scenes.length&&scenes.length?"#4a9e6e":"#e8d5a0"},
+           {v:pkCount,l:"Pickups owed",c:pkCount?"#b39cff":"#5a5248"}];
   for(var i=0;i<arr.length;i++)h+='<div class="s"><div class="n" style="color:'+arr[i].c+'">'+arr[i].v+'</div><div class="l">'+arr[i].l+'</div></div>';
   h+='</div>'+renderHLBar();
   el.innerHTML=h;
@@ -880,13 +1021,6 @@ function renderDayPanel(day){
     if(lenses.length>1)h+='<div class="cs-warn amber">Two lens packages on one day: '+esc(lenses.join(" &middot; "))+'. Budget a rebuild.</div>';
     if(dayUnlocked(assigned))h+='<div class="cs-warn amber">A location on this day is not confirmed yet.</div>';
 
-    h+='<div class="dp-section">Day</div>';
-    h+='<div class="field" style="display:flex;gap:5px;margin-bottom:6px">';
-    h+='<input id="dp-label" placeholder="Day label (e.g. Winery Night 1)" value="'+esc(meta.label)+'" style="flex:1;padding:6px 9px;border-radius:5px;border:1px solid #3a342e;background:#141210;color:#e8e0d6;font-size:12px;outline:none">';
-    h+='<input id="dp-call" placeholder="Call" value="'+esc(meta.call)+'" style="width:64px;padding:6px;border-radius:5px;border:1px solid #3a342e;background:#141210;color:#e8e0d6;font-size:12px;outline:none;text-align:center">';
-    h+='<input id="dp-wrap" placeholder="Wrap" value="'+esc(meta.wrap)+'" style="width:64px;padding:6px;border-radius:5px;border:1px solid #3a342e;background:#141210;color:#e8e0d6;font-size:12px;outline:none;text-align:center">';
-    if(canEdit())h+='<button class="mbtn gold" style="padding:6px 12px;font-size:11px" onclick="saveDayEdits(\''+k+'\')">Save</button>';
-    h+='</div>';
     if(cams.length)h+='<div style="font-size:10px;color:#8a7e72;margin-bottom:4px">Camera: <span style="color:#c9b896">'+esc(cams.join(", "))+'</span> &nbsp;·&nbsp; Lens: <span style="color:#c9b896">'+esc(lenses.join(", "))+'</span></div>';
 
     // Locations with address + lock status
@@ -926,13 +1060,15 @@ function renderDayPanel(day){
     h+='<div class="dp-section">Scenes</div>';
     for(var i=0;i<assigned.length;i++){
       var s=assigned[i],open=!!openScene[s.uid];
-      h+='<div class="sc-card">';
+      h+='<div class="sc-card'+flagClasses(s)+'">';
       h+='<div class="sc-h" onclick="toggleScene(\''+s.uid+'\')">';
       h+='<span class="sc-seq" style="background:'+CC[s.complexity]+'">'+esc(s.seqLabel||("SEQ "+s.seq))+'</span>';
-      h+='<div class="sc-t"><div class="sc-name">'+esc(s.title)+'</div><div class="sc-slug">'+esc(s.slugline)+'</div></div>';
+      h+='<div class="sc-t"><div class="sc-name">'+esc(s.title)+pickupTag(s)+'</div><div class="sc-slug">'+esc(s.slugline)+'</div></div>';
+      h+=flagButtons(s);
       h+='<div class="sc-len">'+(s.length?esc(s.length.replace(/:00$/,"")):"—")+'</div></div>';
       if(open){
         h+='<div class="sc-body">';
+        if(needsPickup(s))h+='<div class="pk-note"><b>Pickup owed:</b> '+esc(pickupNote(s)||"(no note yet — add one in Edit scheduling)")+'</div>';
         if(s.shortSummary)h+='<p style="color:#e8d5a0">'+esc(s.shortSummary)+'</p>';
         if(s.detail)h+='<p>'+esc(s.detail)+'</p>';
         var dept=[["Cast",s.raw.cast],["Extras",s.raw.extras],["Vehicles",s.raw.vehicles],
@@ -1007,9 +1143,9 @@ function renderDayPanel(day){
 
 function toggleScene(uid){openScene[uid]=!openScene[uid];if(selDay)renderDayPanel(selDay)}
 function saveDayEdits(k){
-  var l=document.getElementById("dp-label"),c=document.getElementById("dp-call"),
-      w=document.getElementById("dp-wrap"),n=document.getElementById("dp-notes");
-  var d={label:l?l.value:"",call:c?c.value:"",wrap:w?w.value:"",notes:n?n.value:""};
+  // label/call/wrap are no longer edited here; keep whatever the sheet already has
+  var prev=days[k]||{label:"",call:"",wrap:"",notes:""},n=document.getElementById("dp-notes");
+  var d={label:prev.label||"",call:prev.call||"",wrap:prev.wrap||"",notes:n?n.value:prev.notes||""};
   days[k]=d;saveDayMeta(k,d).then(function(){toast("Day saved","ok")});
 }
 function cycleAvail(catKey,idx){
@@ -1083,6 +1219,14 @@ function renderEditor(isNew){
     h+='<div class="ro-note">'+(edDetail?'Click to collapse':'Click to read the whole thing')+'</div></div>';
   }
 
+  if(!isNew){
+    var pk=splitNotes(s.notes);
+    h+='<div class="field"><label>Completion</label><div class="tog-row">';
+    h+='<button class="tog cmp-shot'+(isShot(s)?' pos':'')+'" onclick="togFlagEd(SHOT)">&#10003; Shot</button>';
+    h+='<button class="tog cmp-pk'+(needsPickup(s)?' pos':'')+'" onclick="togFlagEd(PICKUP)">&#9685; Pickup owed</button></div>';
+    if(needsPickup(s))h+='<textarea id="ed-pickup" rows="2" placeholder="What still needs to be picked up — e.g. insert of the watch face, Tom\'s reaction from the stairwell" style="margin-top:6px;border-color:#7c5cff88">'+esc(pk.pickup)+'</textarea>';
+    h+='<div class="ro-note">Shot fades the scene to yellow everywhere. Pickup marks it purple and keeps the note in Sched Notes as a "Pickup:" line.</div></div>';
+  }
   h+='<div class="field"><label>Shoot Day</label><input type="date" id="ed-day" value="'+esc(s.shootDay||"")+'" onchange="window._ed.shootDay=this.value">';
   h+='<div class="ro-note">Blank = unscheduled. Writes column X of the Sequences tab.</div></div>';
 
@@ -1101,6 +1245,7 @@ function renderEditor(isNew){
       h+='<div class="tog-row">';
       for(var oi=0;oi<cat.options.length;oi++){
         var o=cat.options[oi],on=(s[cat.key]||[]).indexOf(o)>=0;
+        if(cat.key==="status"&&(o===SHOT||o===PICKUP))continue;   // handled by the Completion row above
         h+='<button class="tog'+(on?' pos':'')+'" style="--tc:'+cat.color+'" onclick="togEdit(\''+cat.key+'\','+oi+')">'+esc(o)+'</button>';
       }
       h+='</div>';
@@ -1112,7 +1257,7 @@ function renderEditor(isNew){
     h+='</div>';
   }
 
-  h+='<div class="field"><label>Scheduling Notes</label><textarea id="ed-notes" rows="3" onchange="window._ed.notes=this.value">'+esc(s.notes||"")+'</textarea></div>';
+  h+='<div class="field"><label>Scheduling Notes</label><textarea id="ed-notes" rows="3">'+esc(splitNotes(s.notes).notes)+'</textarea></div>';
   h+='<div style="display:flex;justify-content:space-between;margin-top:8px"><div style="display:flex;gap:8px">';
   if(canEdit())h+='<button class="mbtn gold" onclick="saveEdit()">Save</button>';
   else h+='<button class="mbtn gold" onclick="unlockThenEditor()">&#128274; Unlock to edit</button>';
@@ -1134,11 +1279,23 @@ function togEdit(catKey,idx){
   renderEditor(!!s._new);
 }
 function setCx(n){window._ed.complexity=n;renderEditor(!!window._ed._new)}
+/** Completion toggles in the editor. Keeps the typed pickup note across the re-render. */
+function togFlagEd(flag){
+  var s=window._ed;if(!s.status)s.status=[];
+  var pkEl=document.getElementById("ed-pickup"),nEl=document.getElementById("ed-notes");
+  var pk=pkEl?pkEl.value:splitNotes(s.notes).pickup,notes=nEl?nEl.value:splitNotes(s.notes).notes;
+  var i=s.status.indexOf(flag);if(i>=0)s.status.splice(i,1);else s.status.push(flag);
+  ensureStatusOption(flag);
+  s.notes=joinNotes(notes,s.status.indexOf(PICKUP)>=0?pk:"");
+  renderEditor(false);
+  if(flag===PICKUP&&s.status.indexOf(PICKUP)>=0)setTimeout(function(){var el=document.getElementById("ed-pickup");if(el)el.focus()},40);
+}
 
 function saveEdit(){
   var s=window._ed;
   var dayEl=document.getElementById("ed-day");if(dayEl)s.shootDay=dayEl.value;
-  var nEl=document.getElementById("ed-notes");if(nEl)s.notes=nEl.value;
+  var nEl=document.getElementById("ed-notes"),pkEl=document.getElementById("ed-pickup");
+  if(nEl)s.notes=joinNotes(nEl.value,needsPickup(s)&&pkEl?pkEl.value:(needsPickup(s)?splitNotes(s.notes).pickup:""));
   var shEl=document.getElementById("ed-short");if(shEl)s.shortSummary=shEl.value;
   if(s._new){
     var sq=document.getElementById("ed-seq"),ti=document.getElementById("ed-title");
