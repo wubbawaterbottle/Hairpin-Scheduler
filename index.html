@@ -497,6 +497,8 @@ function loadFromSheet(quiet){
     if(data.rosterAdded)toast(data.rosterAdded+" new value(s) added to Rosters","info");
     else if(!quiet)toast("Loaded "+scenes.length+" scenes","ok");
     render();
+    // the sheet changed under us — let the Task Manager refresh quietly too
+    if(quiet&&window.tmOnSheetRefresh)window.tmOnSheetRefresh();
     return true;
   });
 }
