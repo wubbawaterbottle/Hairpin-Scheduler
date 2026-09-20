@@ -16,6 +16,7 @@
 .tm-page{height:calc(100vh - var(--hdr,56px));overflow:auto;padding:14px 18px 42px;background:#141210}
 .tm-shell{max-width:1700px;margin:auto}
 .tm-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.tm-authority{font-size:10px;color:#8f835f;border:1px solid #3a342e;background:#1a1714;border-radius:12px;padding:4px 9px;white-space:nowrap}
 .tm-subtabs{display:flex;gap:4px;flex-wrap:wrap}
 .tm-subtab{border:1px solid #3a342e;background:#1a1714;color:#9b9084;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer}
 .tm-subtab.active{border-color:#c49b2a;color:#e8d5a0;background:#c49b2a1a}
@@ -78,7 +79,11 @@
 .tm-chip.st-extra{color:#c9bfb3;border-color:#3f3a33}
 .tm-dot.extra{background:#8a7e72}
 .tm-summary-text{color:#a89d91;font-size:12px;line-height:1.5;margin-top:6px;width:100%}
-.tm-scene-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 14px}
+.tm-scene-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 14px}
+.tm-scene-grid>div{min-width:0}
+.tm-scene-grid .tm-chip{white-space:normal;overflow-wrap:anywhere;text-overflow:clip}
+.tm-sequence-edit{padding:12px;margin:0 0 14px;background:#171411;border:1px solid #342e28;border-radius:8px}
+.tm-record-id{font-size:9px;color:#5f564d;margin-top:3px;letter-spacing:.2px}
 /* people */
 .tm-people th.tm-col-name{width:15%}
 .tm-people th.tm-col-group{width:8%}
@@ -117,6 +122,8 @@
 .tm-chips{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 .tm-chip{display:inline-flex;align-items:center;gap:5px;max-width:100%;border:1px solid #332d27;background:#1f1b17;color:#d9cfc2;border-radius:12px;padding:2px 8px 2px 6px;font-size:11px;line-height:1.5;margin:1px 3px 2px 0;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
 .tm-chip:hover{border-color:#5b4e42;color:#f0e8dc}
+.tm-chip-sub{display:block;color:#81766b;font-size:9px;line-height:1.2;margin-top:-1px}
+.tm-chip:hover .tm-chip-sub{color:#aaa096}
 .tm-chip.via{opacity:.6;border-style:dashed}
 .tm-chip.st-scene{color:#e8d5a0;border-color:#c49b2a44}
 .tm-chip.st-muted{color:#8a7e72}
