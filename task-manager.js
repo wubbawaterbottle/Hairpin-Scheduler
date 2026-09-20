@@ -11,7 +11,7 @@
    merged into memory and re-rendered in place. The database is downloaded once per
    unlock, never after a checkbox. */
 var production={people:[],items:[],requirements:[],staffing:[],tasks:[],notes:[]};
-var tmLoaded=false,tmLoading=false,tmView="sequences",tmQuery="",tmDrag=null;   // Sequences opens first (Mr. John, 2026-09-17)
+var tmLoaded=false,tmLoading=false,tmView="sequences",tmQuery="",tmDrag=null;   // Sequences opens first (Mr. John, 2026-09-17) and is the data authority.
 var tmPeopleFilter="all",tmShowDone=false,tmShowRemoved=false,tmPending=0,tmSavedTimer=null;
 var TM_GROUPS=["Cast","Crew","Producer","Extras","Stunts","HMU","Wardrobe"];
 var tmJustDone={};   // tasks ticked this session stay visible, struck through, until the view is reopened
@@ -89,6 +89,38 @@ function tmIndex(){
   production.staffing.forEach(function(s){push(ix.staffByScene,s.SCENE_UID,s);tmSplitIds(s.ASSIGNED_PERSON_IDS).forEach(function(pid){push(ix.staffByPerson,pid,s)})});
   production.tasks.forEach(function(t){push(ix.tasksByScene,t.SCENE_UID,t);push(ix.tasksByItem,t.ITEM_ID,t)});
   tmIx=ix;
+}
+/** Keep the Scheduler's in-memory scene model on the same canonical links as the
+    Sequences workspace. No page reload and no second database. */
+function tmSyncSceneModel(uid){
+  var s=getScene(uid);if(!s)return;
+  var raw={locations:[],props:[],vehicles:[],wardrobe:[],hairMakeup:[],vfx:[],stunts:[],cast:[],extras:[]},canon={locations:[],props:[]};
+  function add(a,v){v=String(v||"").trim();if(v&&a.indexOf(v)<0)a.push(v)}
+  (tmIx.reqsByScene[uid]||[]).forEach(function(r){
+    var it=tmIx.items[r.ITEM_ID];if(!it||!tmActive(it))return;var w=r.SCENE_WORDING||it.NAME;
+    if(it.TYPE==="Location"){add(raw.locations,w);add(canon.locations,it.NAME)}
+    else if(it.TYPE==="Prop"){add(raw.props,w);add(canon.props,it.NAME)}
+    else if(it.TYPE==="Vehicle"){add(raw.vehicles,w);add(raw.props,w);add(canon.props,it.NAME)}
+    else if(it.TYPE==="Wardrobe")add(raw.wardrobe,w);
+    else if(it.TYPE==="Hair & Makeup")add(raw.hairMakeup,w);
+    else if(it.TYPE==="VFX / SFX")add(raw.vfx,w);
+    else if(it.TYPE==="Stunt")add(raw.stunts,w);
+  });
+  (tmIx.staffByScene[uid]||[]).forEach(function(st){
+    if(st.DEPARTMENT==="Cast"){
+      add(raw.cast,st.ROLE);
+      var ids=tmSplitIds(st.ASSIGNED_PERSON_IDS),cat=typeof getCat==="function"?getCat("cast"):null;
+      if(ids.length===1&&cat&&cat.meta&&cat.meta[st.ROLE])cat.meta[st.ROLE].note=tmPersonName(ids[0]);
+    }else if(st.DEPARTMENT==="Extras")add(raw.extras,st.ROLE);
+  });
+  s.raw=s.raw||{};
+  Object.keys(raw).forEach(function(k){s.raw[k]=raw[k]});
+  s.locations=canon.locations;s.props=canon.props;s.cast=raw.cast.slice();s.extras=raw.extras.slice();
+  s.hasStunts=raw.stunts.length>0;s.hasVfx=raw.vfx.length>0;
+}
+function tmSyncAffected(uids){
+  (uids||[]).filter(function(x,i,a){return x&&a.indexOf(x)===i}).forEach(tmSyncSceneModel);
+  if(typeof render==="function")render();
 }
 function tmMerge(list,key,record){
   if(!record)return null;
@@ -198,10 +230,30 @@ function tmOptimisticDelete(kind,id,action,after){
   });
 }
 function tmSaveTask(record,after){return tmOptimistic("task",record,after)}
-function tmSaveItem(record,after){return tmOptimistic("item",record,after)}
+function tmSaveItem(record,after){
+  var reqs=tmIx.reqsByItem[record.ITEM_ID]||[],uids=reqs.map(function(r){return r.SCENE_UID});
+  // a rename carries along scene wording that was just a copy of the old name (the
+  // backend does the same in one write), so call sheets read the new name too
+  var prev=tmIx.items[record.ITEM_ID];
+  if(prev&&String(prev.NAME)!==String(record.NAME))reqs.forEach(function(r){if(!r.SCENE_WORDING||tmNameKey(r.SCENE_WORDING)===tmNameKey(prev.NAME))r.SCENE_WORDING=record.NAME});
+  return tmOptimistic("item",record,function(){tmSyncAffected(uids);if(after)after()});
+}
 function tmSavePerson(record,after){return tmOptimistic("person",record,after)}
-function tmSaveStaffing(record,after){return tmOptimistic("staffing",record,after)}
-function tmSaveRequirement(record,after){return tmOptimistic("requirement",record,after)}
+function tmSaveStaffing(record,after){
+  var related=record.DEPARTMENT==="Cast"?production.staffing.filter(function(st){return st.DEPARTMENT==="Cast"&&tmNameKey(st.ROLE)===tmNameKey(record.ROLE)}):[record];
+  var uids=related.map(function(st){return st.SCENE_UID});
+  // mirror the backend: one actor per character. A new row with no actor inherits
+  // the character's existing actor; only an existing row saved empty un-casts.
+  if(record.DEPARTMENT==="Cast"){
+    var isNew=!tmById(production.staffing,"STAFFING_ID",record.STAFFING_ID);
+    if(!record.ASSIGNED_PERSON_IDS&&isNew){var sib=related.filter(function(st){return st.ASSIGNED_PERSON_IDS})[0];if(sib)record.ASSIGNED_PERSON_IDS=sib.ASSIGNED_PERSON_IDS}
+    if(record.ASSIGNED_PERSON_IDS||!isNew)related.forEach(function(st){st.ASSIGNED_PERSON_IDS=record.ASSIGNED_PERSON_IDS;st.CONFIRMED_COUNT=record.ASSIGNED_PERSON_IDS?1:0;st.GAP=record.ASSIGNED_PERSON_IDS?0:tmNum(st.NEEDED,1)});
+  }
+  return tmOptimistic("staffing",record,function(){tmIndex();tmSyncAffected(uids);if(after)after()}).then(function(r){if(r&&r.error)loadProduction(true);return r});
+}
+function tmSaveRequirement(record,after){
+  return tmOptimistic("requirement",record,function(){tmSyncAffected([record.SCENE_UID]);if(after)after()});
+}
 function tmSaveNote(record,after){return tmOptimistic("note",record,after)}
 /** Several small writes in a row (one per scene), with "Saving 3/9…" progress. Stops at the first failure. */
 function tmSaveChain(jobs,label){
@@ -234,10 +286,10 @@ function renderTaskManager(){
   updateToday();
   if(!canEdit()){tmLoadError("Unlock editing to view private production details, contracts, assignments and notes.");return}
   if(!tmLoaded){loadProduction();return}
-  var tabs=[["sequences","Sequences"],["todo","To-do"],["people","People & Contracts"]];
+  var tabs=[["sequences","Sequences · Master"],["todo","To-do"],["people","People & Contracts"]];
   var h='<div class="tm-shell"><div class="tm-toolbar"><div class="tm-subtabs">';
   for(var i=0;i<tabs.length;i++)h+='<button class="tm-subtab '+(tmView===tabs[i][0]?"active":"")+'" onclick="tmSetView(\''+tabs[i][0]+'\')">'+tabs[i][1]+'</button>';
-  h+='</div><span id="tmSaveState" class="tm-save"></span><input class="tm-search" value="'+tmAttr(tmQuery)+'" placeholder="Search" oninput="tmSetQuery(this.value)">';
+  h+='</div><span class="tm-authority" title="Sequence records drive Scheduler and Calendar">Sequences → Scheduler → Calendar</span><span id="tmSaveState" class="tm-save"></span><input class="tm-search" value="'+tmAttr(tmQuery)+'" placeholder="Search" oninput="tmSetQuery(this.value)">';
   h+='<button class="hbtn" onclick="loadProduction(true)" title="Re-download from the sheet">&#8635; Sync</button></div><div id="tmBody"></div></div>';
   document.getElementById("taskManagerPage").innerHTML=h;renderTaskBody();
 }
@@ -257,8 +309,9 @@ function tmItemChip(item,req){
   if(!item)return'<span class="tm-chip st-red" title="Missing item record">'+esc(req?req.SCENE_WORDING||req.ITEM_ID:"?")+'</span>';
   var st=req?tmInherited(req):tmStatus(item.STATUS);
   var tip=item.NAME+(req&&req.SCENE_WORDING&&req.SCENE_WORDING!==item.NAME?' — in this scene: '+req.SCENE_WORDING:'')+(req&&req.NOTES?' — '+req.NOTES:'')+(item.NOTES?' — '+item.NOTES:'');
+  var sub=req&&item.TYPE==="Location"&&req.SCENE_WORDING&&tmNameKey(req.SCENE_WORDING)!==tmNameKey(item.NAME)?'<span class="tm-chip-sub">'+esc(req.SCENE_WORDING)+'</span>':'';
   var click=req?'tmOpenReqPop(event,\''+tmAttr(req.REQUIREMENT_ID)+'\')':'openItemEditor(\''+tmAttr(item.ITEM_ID)+'\')';
-  return'<span class="tm-chip st-'+st.toLowerCase()+'" draggable="true" ondragstart="tmStartDrag(event,\'Item\',\''+tmAttr(item.ITEM_ID)+'\')" onclick="event.stopPropagation();'+click+'" title="'+tmAttr(tip)+'"><i class="tm-dot '+st.toLowerCase()+'"></i>'+esc(item.NAME)+(req&&req.NOTES?'<i class="tm-notemark" title="Has a scene note">•</i>':'')+'</span>';
+  return'<span class="tm-chip st-'+st.toLowerCase()+'" draggable="true" ondragstart="tmStartDrag(event,\'Item\',\''+tmAttr(item.ITEM_ID)+'\')" onclick="event.stopPropagation();'+click+'" title="'+tmAttr(tip)+'"><i class="tm-dot '+st.toLowerCase()+'"></i><span>'+esc(item.NAME)+sub+'</span>'+(req&&req.NOTES?'<i class="tm-notemark" title="Has a scene note">•</i>':'')+'</span>';
 }
 function tmPersonChip(p,label){
   var st=tmPersonState(p);
@@ -580,7 +633,7 @@ function tmOpenAddPop(e,uid,key){
     return h+'<div class="tm-pop-foot tm-muted">Tick to add · tick again to remove · each is one save</div>';
   });
 }
-function tmAfterScene(uid){tmRefreshSceneRow(uid);tmPopRender()}
+function tmAfterScene(uid){tmSyncAffected([uid]);tmRefreshSceneRow(uid);tmPopRender()}
 function tmSceneAfter(uid){return function(){tmAfterScene(uid)}}
 function tmPopAddReq(uid,itemId){
   var item=tmIx.items[itemId],s=tmScene(uid);if(!item)return;
@@ -624,13 +677,22 @@ function tmOpenReqPop(e,reqId){
     var r=tmById(production.requirements,"REQUIREMENT_ID",reqId);if(!r)return'<div class="tm-muted">Removed.</div>';
     var item=tmIx.items[r.ITEM_ID]||{NAME:r.SCENE_WORDING,TYPE:r.ITEM_TYPE,STATUS:"Red"},uses=(tmIx.reqsByItem[r.ITEM_ID]||[]).length;
     var h='<div class="tm-pop-head"><b>'+esc(item.NAME)+'</b><span class="tm-muted">'+esc(item.TYPE)+' · in '+uses+' scene'+(uses===1?'':'s')+'</span><button class="tm-more" onclick="tmPopClose()">✕</button></div>';
+    h+='<div class="tm-pop-label">Master ID name <span class="tm-muted">— renames it everywhere</span></div><input class="tm-input" value="'+tmAttr(item.NAME)+'" onkeydown="if(event.key===\'Enter\')this.blur()" onblur="tmPopRenameItem(\''+tmAttr(item.ITEM_ID)+'\',this.value)">';
     h+='<div class="tm-pop-label">Status (everywhere it appears)</div><div class="tm-tog-row">'+TM_STATUSES.map(function(st){return tmTog(tmStatus(item.STATUS)===st,st,'tmPopSetItemStatus(\''+tmAttr(item.ITEM_ID)+'\',\''+st+'\')',st.toLowerCase())}).join("")+'</div>';
+    h+='<div class="tm-pop-label">Wording / subarea in this sequence</div><input class="tm-input" value="'+tmAttr(r.SCENE_WORDING||item.NAME)+'" placeholder="'+tmAttr(item.NAME)+'" onkeydown="if(event.key===\'Enter\')this.blur()" onblur="tmPopSetReqField(\''+tmAttr(reqId)+'\',\'SCENE_WORDING\',this.value)">';
     h+='<div class="tm-pop-label">Note for this scene only</div><input class="tm-input" value="'+tmAttr(r.NOTES||"")+'" placeholder="'+tmAttr(r.SCENE_WORDING&&r.SCENE_WORDING!==item.NAME?'Script says: '+r.SCENE_WORDING:'e.g. needs to be the dented one')+'" onkeydown="if(event.key===\'Enter\')this.blur()" onblur="tmPopSetReqNote(\''+tmAttr(reqId)+'\',this.value)">';
     h+='<div class="tm-pop-actions"><button class="hbtn tm-danger" onclick="tmPopRemoveReq(\''+tmAttr(reqId)+'\',\''+tmAttr(uid)+'\');tmPopClose()">Remove from scene</button><span class="tm-spacer"></span><button class="hbtn" onclick="tmPopClose();openItemEditor(\''+tmAttr(item.ITEM_ID)+'\')">Full record…</button></div>';
     return h;
   });
 }
+function tmPopRenameItem(itemId,value){
+  var it=tmIx.items[itemId];value=String(value||"").trim();
+  if(!it)return;if(!value){tmPopRender();return}if(value===String(it.NAME||""))return;
+  tmSaveItem(Object.assign({},it,{NAME:value}),function(){renderTaskBody();tmPopRender()});
+  toast('Renamed everywhere to “'+value+'”',"ok");
+}
 function tmPopSetItemStatus(itemId,st){var it=tmIx.items[itemId];if(!it||tmStatus(it.STATUS)===st)return;tmSaveItem(Object.assign({},it,{STATUS:st}),function(){renderTaskBody();tmPopRender()})}
+function tmPopSetReqField(reqId,field,value){var r=tmById(production.requirements,"REQUIREMENT_ID",reqId);value=String(value||"").trim();if(!r||String(r[field]||"")===value)return;var rec=Object.assign({},r);rec[field]=value;tmSaveRequirement(rec,function(){tmRefreshSceneRow(r.SCENE_UID);tmPopRender()})}
 function tmPopSetReqNote(reqId,v){var r=tmById(production.requirements,"REQUIREMENT_ID",reqId);if(!r||String(r.NOTES||"")===v.trim())return;tmSaveRequirement(Object.assign({},r,{NOTES:v.trim()}),function(){tmRefreshSceneRow(r.SCENE_UID)})}
 
 /** Click on a cast / crew / extras chip: who plays it, how many, remove. */
@@ -745,33 +807,60 @@ function openItemEditor(id){
   h+='<div class="tm-field full"><label>Link</label><input class="tm-input" id="itemLink" value="'+tmAttr(item.LINK||"")+'" placeholder="Vendor, photo, contract or reference link"></div>';
   h+='<div class="tm-field full"><label>Notes (apply everywhere this appears)</label><textarea class="tm-textarea" id="itemNotes">'+esc(item.NOTES||"")+'</textarea></div></div>';
   h+='<div class="tm-field"><label>Where it appears · scene-only override and note</label>';
-  reqs.forEach(function(r){var s=tmScene(r.SCENE_UID);h+='<div class="tm-scene-link"><b>'+esc(s.seqLabel||s.seq)+' — '+esc(s.title)+'</b>'+(s.shootDay?' <span class="tm-muted">'+esc(tmFmtDate(s.shootDay))+'</span>':'')+'<div class="tm-pair" style="margin-top:5px"><select class="tm-mini-select" id="req-'+tmAttr(r.REQUIREMENT_ID)+'"><option value="">Inherit</option>'+TM_STATUSES.map(function(v){return'<option'+(r.STATUS_OVERRIDE===v?' selected':'')+'>'+v+'</option>'}).join("")+'</select><input class="tm-input" id="reqn-'+tmAttr(r.REQUIREMENT_ID)+'" value="'+tmAttr(r.NOTES||"")+'" placeholder="'+tmAttr(r.SCENE_WORDING||"Scene-specific note")+'"></div></div>'});
+  reqs.forEach(function(r){var s=tmScene(r.SCENE_UID);h+='<div class="tm-scene-link"><b>'+esc(s.seqLabel||s.seq)+' — '+esc(s.title)+'</b>'+(s.shootDay?' <span class="tm-muted">'+esc(tmFmtDate(s.shootDay))+'</span>':'')+'<input class="tm-input" id="reqw-'+tmAttr(r.REQUIREMENT_ID)+'" value="'+tmAttr(r.SCENE_WORDING||item.NAME)+'" placeholder="Scene wording / subarea" style="margin-top:5px"><div class="tm-pair" style="margin-top:5px"><select class="tm-mini-select" id="req-'+tmAttr(r.REQUIREMENT_ID)+'"><option value="">Inherit</option>'+TM_STATUSES.map(function(v){return'<option'+(r.STATUS_OVERRIDE===v?' selected':'')+'>'+v+'</option>'}).join("")+'</select><input class="tm-input" id="reqn-'+tmAttr(r.REQUIREMENT_ID)+'" value="'+tmAttr(r.NOTES||"")+'" placeholder="Scene-specific note"></div></div>'});
   var linked=(tmIx.tasksByItem[id]||[]);
   h+='</div>'+(linked.length?'<div class="tm-field"><label>Tasks</label>'+linked.map(function(t){return tmMiniTask(t,false)}).join("")+'</div>':'');
-  h+='<div class="tm-actions"><button class="mbtn ghost" onclick="tmClose();openTaskEditor(null,{type:\'Item\',id:\''+tmAttr(id)+'\'})">+ Task</button><span class="tm-spacer"></span><button class="mbtn ghost" onclick="tmClose()">Cancel</button><button class="mbtn gold" onclick="saveItemEditor(\''+tmAttr(id)+'\')">Save</button></div>';tmModal(h);
+  h+='<div class="tm-actions"><button class="mbtn ghost" onclick="tmClose();openTaskEditor(null,{type:\'Item\',id:\''+tmAttr(id)+'\'})">+ Task</button><button class="mbtn ghost" onclick="openMergeItem(\''+tmAttr(id)+'\')">Merge duplicate…</button><span class="tm-spacer"></span><button class="mbtn ghost" onclick="tmClose()">Cancel</button><button class="mbtn gold" onclick="saveItemEditor(\''+tmAttr(id)+'\')">Save</button></div>';tmModal(h);
 }
 function saveItemEditor(id){
   var item=tmIx.items[id];if(!item)return;
   var record=Object.assign({},item,{NAME:tmVal("itemName")||item.NAME,STATUS:tmVal("itemStatus"),CONTRACT_STATUS:tmVal("itemContract"),OWNER:tmVal("itemOwner"),QUANTITY_NEEDED:tmVal("itemNeeded"),QUANTITY_READY:tmVal("itemReady"),LINK:tmVal("itemLink"),NOTES:tmVal("itemNotes")});
   if(item.TYPE==="Location")record.ADDRESS=tmVal("itemAddress");
-  var reqJobs=(tmIx.reqsByItem[id]||[]).filter(function(r){return String(r.STATUS_OVERRIDE||"")!==tmVal("req-"+r.REQUIREMENT_ID)||String(r.NOTES||"")!==tmVal("reqn-"+r.REQUIREMENT_ID)}).map(function(r){return Object.assign({},r,{STATUS_OVERRIDE:tmVal("req-"+r.REQUIREMENT_ID),NOTES:tmVal("reqn-"+r.REQUIREMENT_ID)})});
+  var reqJobs=(tmIx.reqsByItem[id]||[]).filter(function(r){return String(r.SCENE_WORDING||"")!==tmVal("reqw-"+r.REQUIREMENT_ID)||String(r.STATUS_OVERRIDE||"")!==tmVal("req-"+r.REQUIREMENT_ID)||String(r.NOTES||"")!==tmVal("reqn-"+r.REQUIREMENT_ID)}).map(function(r){return Object.assign({},r,{SCENE_WORDING:tmVal("reqw-"+r.REQUIREMENT_ID),STATUS_OVERRIDE:tmVal("req-"+r.REQUIREMENT_ID),NOTES:tmVal("reqn-"+r.REQUIREMENT_ID)})});
   tmClose();
   tmSaveItem(record,renderTaskBody);
   // scene overrides are separate rows; write only the ones that changed
   reqJobs.forEach(function(rec){tmSaveRequirement(rec,renderTaskBody)});
+}
+function openMergeItem(id){
+  var item=tmIx.items[id];if(!item)return;
+  var options=production.items.filter(function(i){return i.ITEM_ID!==id&&i.TYPE===item.TYPE&&tmActive(i)}).sort(function(a,b){return String(a.NAME).localeCompare(String(b.NAME))});
+  var h='<h2>Merge duplicate '+esc(item.TYPE.toLowerCase())+'</h2><div class="tm-modal-sub">Move every sequence, task and note from <b>'+esc(item.NAME)+'</b> into one canonical record. The old ID stays as inactive history.</div>';
+  h+='<div class="tm-field"><label>Keep this record</label><select class="tm-input" id="mergeItemInto">'+options.map(function(i){return'<option value="'+tmAttr(i.ITEM_ID)+'">'+esc(i.NAME)+' · '+(tmIx.reqsByItem[i.ITEM_ID]||[]).length+' sequences</option>'}).join("")+'</select></div>';
+  h+='<div class="tm-actions"><button class="mbtn ghost" onclick="openItemEditor(\''+tmAttr(id)+'\')">Back</button><span class="tm-spacer"></span><button class="mbtn gold" '+(options.length?'':'disabled')+' onclick="runMergeItem(\''+tmAttr(id)+'\')">Merge records</button></div>';tmModal(h);
+}
+function runMergeItem(fromId){
+  var intoId=tmVal("mergeItemInto"),from=tmIx.items[fromId],into=tmIx.items[intoId];if(!intoId||!from||!into)return;
+  if(!confirm('Merge "'+from.NAME+'" into "'+into.NAME+'"?\n\nAll linked scenes and tasks will use the kept record.'))return;
+  tmClose();tmSave({action:"mergeItem",fromId:fromId,intoId:intoId}).then(function(r){
+    if(!r||r.error)return;loadProduction(true).then(function(){return loadFromSheet(true)}).then(function(){toast(from.NAME+' merged into '+into.NAME,"ok")});
+  });
 }
 
 /** Scene panel: what this one sequence needs, who is in it, and its scene-only notes. */
 function openSceneProduction(uid){
   var s=tmScene(uid),reqs=tmIx.reqsByScene[uid]||[],staff=tmIx.staffByScene[uid]||[],notes=production.notes.filter(function(n){return n.SCOPE_TYPE==="Scene"&&n.SCOPE_ID===uid&&!tmBool(n.RESOLVED)}),tasks=tmIx.tasksByScene[uid]||[];
   var h='<h2>'+esc(s.seqLabel||s.seq)+' — '+esc(s.title)+'</h2><div class="tm-modal-sub">'+(s.shootDay?'Shoots '+esc(tmFmtDate(s.shootDay)):'Unscheduled')+' · '+reqs.length+' requirements · '+staff.length+' roles'+(s.shortSummary?'<div class="tm-summary-text">'+esc(s.shortSummary)+'</div>':'')+'</div>';
+  h+='<div class="tm-sequence-edit"><div class="tm-form-grid"><div class="tm-field"><label>Sequence label</label><input class="tm-input" id="sceneSeq" value="'+tmAttr(s.seqLabel||s.seq)+'" placeholder="SEQ 25"></div><div class="tm-field"><label>Scene title</label><input class="tm-input" id="sceneTitle" value="'+tmAttr(s.title||"")+'"></div><div class="tm-field"><label>Shoot date</label><input class="tm-input" type="date" id="sceneShootDay" value="'+tmAttr(String(s.shootDay||"").slice(0,10))+'"></div><div class="tm-field"><label>Day order</label><input class="tm-input" type="number" id="sceneDayOrder" value="'+tmAttr(s.dayOrder===null||s.dayOrder===undefined?"":s.dayOrder)+'" placeholder="1"></div><div class="tm-field full"><label>Short summary</label><textarea class="tm-textarea" id="sceneSummary">'+esc(s.shortSummary||"")+'</textarea></div></div><div class="tm-record-id">Stable scene ID: '+esc(uid)+'</div></div>';
   h+='<div class="tm-scene-grid" data-scene-modal="'+tmAttr(uid)+'">';
   TM_CELLS.forEach(function(c){h+='<div class="tm-field"><label>'+esc(c.label)+'</label><div class="tm-chips" data-cell="'+c.key+'">'+tmCellChips(uid,c)+'</div></div>'});
   h+='</div>';
   h+='<div class="tm-field"><label>Tasks</label><div class="tm-chips">'+tasks.map(function(t){return tmMiniTask(t,false)}).join("")+'<button class="tm-plus" onclick="tmClose();openTaskEditor(null,{type:\'Scene\',id:\''+tmAttr(uid)+'\'})">+</button></div></div>';
   h+='<div class="tm-field"><label>Scene-only notes</label>'+notes.map(function(n){return'<div class="tm-scene-link"><b>'+esc(n.CATEGORY||"Note")+'</b> '+esc(n.BODY)+' <button class="tm-more" title="Resolve" onclick="tmResolveNote(\''+tmAttr(n.NOTE_ID)+'\',\''+tmAttr(uid)+'\')">✓</button></div>'}).join("");
   h+='<div class="tm-pair" style="margin-top:6px"><select class="tm-input" id="sceneNoteCategory" style="max-width:130px"><option>Logistics</option><option>Creative</option><option>Safety</option><option>Schedule</option><option>General</option></select><input class="tm-input" id="sceneNoteBody" placeholder="Add a note that belongs only to this scene" onkeydown="if(event.key===\'Enter\')saveSceneNote(\''+tmAttr(uid)+'\')"><button class="hbtn gold" onclick="saveSceneNote(\''+tmAttr(uid)+'\')">Add</button></div></div>';
-  h+='<div class="tm-actions"><button class="mbtn ghost" onclick="tmClose()">Close</button></div>';tmModal(h);
+  h+='<div class="tm-actions"><button class="mbtn ghost" onclick="tmClose()">Close</button><span class="tm-spacer"></span><button class="mbtn gold" onclick="saveSceneProduction(\''+tmAttr(uid)+'\')">Save sequence</button></div>';tmModal(h);
+}
+function saveSceneProduction(uid){
+  var s=getScene(uid);if(!s)return;
+  var label=tmVal("sceneSeq")||s.seqLabel||s.seq,title=tmVal("sceneTitle"),date=tmVal("sceneShootDay"),order=tmVal("sceneDayOrder"),summary=tmVal("sceneSummary");
+  if(!title){toast("The sequence needs a title","err");return}
+  var before={seq:s.seq,seqLabel:s.seqLabel,title:s.title,shootDay:s.shootDay,dayOrder:s.dayOrder,shortSummary:s.shortSummary,name:s.name};
+  s.seqLabel=label;s.seq=String(label).replace(/SEQ/i,"").trim();s.title=title;s.shootDay=date;s.dayOrder=order===""?null:Number(order);s.shortSummary=summary;s.name=label+" — "+title;
+  renderTaskBody();if(typeof render==="function")render();tmSaveState("saving","Saving sequence…");
+  tmSave({action:"saveScene",scene:{uid:uid,seqLabel:label,title:title,fields:{"SEQ":label,"SCENE TITLE":title,"SCENE SHORT SUMMARY":summary,"SHOOTING DAY":date,"DAY ORDER":order}}}).then(function(r){
+    if(!r||r.error){Object.keys(before).forEach(function(k){s[k]=before[k]});renderTaskBody();if(typeof render==="function")render();return}
+    openSceneProduction(uid);toast(label+" saved · Scheduler updated","ok");
+  });
 }
 function saveSceneNote(uid){var body=tmVal("sceneNoteBody");if(!body){toast("Write the note first","err");return}tmSaveNote({NOTE_ID:"",SCOPE_TYPE:"Scene",SCOPE_ID:uid,CATEGORY:tmVal("sceneNoteCategory")||"General",BODY:body,PINNED:false,RESOLVED:false,SOURCE:"Task Manager"},function(){if(document.querySelector('.tm-scene-grid[data-scene-modal="'+uid+'"]'))openSceneProduction(uid)})}
 function tmResolveNote(id,uid){var n=tmById(production.notes,"NOTE_ID",id);if(!n)return;tmSaveNote(Object.assign({},n,{RESOLVED:true}),function(){if(document.querySelector('.tm-scene-grid[data-scene-modal="'+uid+'"]'))openSceneProduction(uid)})}
@@ -819,6 +908,7 @@ function openPersonEditor(id){
   if(!isNew){
     h+='<button class="mbtn ghost" onclick="tmClose();openTaskEditor(null,{type:\'Person\',id:\''+tmAttr(id)+'\'},\''+tmAttr(id)+'\')">+ Task</button>';
     h+='<button class="mbtn ghost" onclick="openReplacePerson(\''+tmAttr(id)+'\')" title="Hand every scene to someone else">Replace in all scenes…</button>';
+    h+='<button class="mbtn ghost" onclick="openMergePerson(\''+tmAttr(id)+'\')" title="Combine accidental duplicate records">Merge duplicate…</button>';
     h+=tmActive(p)?'<button class="mbtn ghost tm-danger" onclick="tmRemovePerson(\''+tmAttr(id)+'\')">Remove from project</button>':'<button class="mbtn ghost" onclick="tmRestorePerson(\''+tmAttr(id)+'\')">Restore</button>';
   }
   h+='<span class="tm-spacer"></span><button class="mbtn ghost" onclick="tmClose()">Cancel</button><button class="mbtn gold" onclick="savePersonEditor(\''+tmAttr(id||"")+'\')">'+(isNew?'Add person':'Save')+'</button></div>';
@@ -833,6 +923,20 @@ function savePersonEditor(id){
   if(!record.NAME){toast("The person needs a name","err");return}
   if(!id)record.PERSON_ID=tmNewPersonId(record.NAME);
   tmClose();tmSavePerson(record,renderTaskBody);if(!id)toast(record.NAME+" added","ok");
+}
+function openMergePerson(id){
+  var person=tmPerson(id);if(!person)return;
+  var options=tmActivePeople().filter(function(p){return p.PERSON_ID!==id}).sort(function(a,b){return String(a.NAME).localeCompare(String(b.NAME))});
+  var h='<h2>Merge duplicate person</h2><div class="tm-modal-sub">Move all scene assignments, tasks and notes from <b>'+esc(person.NAME)+'</b> into the canonical person. The old row remains inactive history.</div>';
+  h+='<div class="tm-field"><label>Keep this person</label><select class="tm-input" id="mergePersonInto">'+options.map(function(p){return'<option value="'+tmAttr(p.PERSON_ID)+'">'+esc(p.NAME)+(p.ROLES_CHARACTERS?' · '+esc(p.ROLES_CHARACTERS):'')+'</option>'}).join("")+'</select></div>';
+  h+='<div class="tm-actions"><button class="mbtn ghost" onclick="openPersonEditor(\''+tmAttr(id)+'\')">Back</button><span class="tm-spacer"></span><button class="mbtn gold" '+(options.length?'':'disabled')+' onclick="runMergePerson(\''+tmAttr(id)+'\')">Merge records</button></div>';tmModal(h);
+}
+function runMergePerson(fromId){
+  var intoId=tmVal("mergePersonInto"),from=tmPerson(fromId),into=tmPerson(intoId);if(!intoId||!from||!into)return;
+  if(!confirm('Merge "'+from.NAME+'" into "'+into.NAME+'"?\n\nEvery staffing assignment and linked task will move to the kept person.'))return;
+  tmClose();tmSave({action:"mergePerson",fromId:fromId,intoId:intoId}).then(function(r){
+    if(!r||r.error)return;loadProduction(true).then(function(){return loadFromSheet(true)}).then(function(){toast(from.NAME+' merged into '+into.NAME,"ok")});
+  });
 }
 
 /** Soft removal: the row stays in the sheet, marked Released and inactive, and
