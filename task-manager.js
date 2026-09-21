@@ -40,6 +40,7 @@ function showAppPage(page){
   document.getElementById("sbToggle").style.display=task?"none":"";
   document.getElementById("newSceneBtn").style.display=!task&&canEdit()?"":"none";
   if(task){if(canEdit())loadProduction();else renderTaskManager();}
+  else tmRenderSchedulerIfDirty();
 }
 function tmBool(v){return v===true||String(v).toLowerCase()==="true"}
 function tmNum(v,d){var n=Number(v);return isNaN(n)||v===""||v===null||v===undefined?d:n}
@@ -118,10 +119,15 @@ function tmSyncSceneModel(uid){
   s.locations=canon.locations;s.props=canon.props;s.cast=raw.cast.slice();s.extras=raw.extras.slice();
   s.hasStunts=raw.stunts.length>0;s.hasVfx=raw.vfx.length>0;
 }
+/* The Scheduler's calendar/sidebar are hidden while the Task Manager is open, so a
+   full Scheduler render on every save is wasted work that only causes jank. Mark it
+   dirty and render once when the tab is next shown. */
+var tmSchedulerDirty=false;
 function tmSyncAffected(uids){
   (uids||[]).filter(function(x,i,a){return x&&a.indexOf(x)===i}).forEach(tmSyncSceneModel);
-  if(typeof render==="function")render();
+  tmSchedulerDirty=true;
 }
+function tmRenderSchedulerIfDirty(){if(tmSchedulerDirty&&typeof render==="function"){tmSchedulerDirty=false;render()}}
 function tmMerge(list,key,record){
   if(!record)return null;
   for(var i=0;i<list.length;i++)if(String(list[i][key])===String(record[key])){list[i]=Object.assign({},list[i],record);tmIndex();return list[i]}
@@ -150,16 +156,37 @@ function loadProduction(force){
   return api("action=getProduction&key="+encodeURIComponent(editKey)).then(function(data){
     tmLoading=false;
     if(!data||data.error){if(data&&data.error==="locked"){editKey="";applyLock()}if(!tmLoaded)tmLoadError(data&&data.message||data&&data.error||"Could not load production data.");else tmSaveState("error","Sync failed");return false}
+    // never clobber an edit that is still on its way to the sheet
+    if(tmPending>0||(typeof writesInFlight!=="undefined"&&writesInFlight>0)){tmRefreshWanted=true;tmSaveState("");return false}
     production=data;["people","items","requirements","staffing","tasks","notes"].forEach(function(k){production[k]=production[k]||[]});
-    tmIndex();tmLoaded=true;renderTaskManager();if(force)tmSaveState("saved","Synced");return true;
+    tmIndex();
+    var wasLoaded=tmLoaded;tmLoaded=true;
+    if(wasLoaded&&document.getElementById("tmBody"))renderTaskBody();   // quiet: keep toolbar, search box and scroll
+    else renderTaskManager();
+    if(force)tmSaveState("saved","Synced");return true;
   });
 }
+/* A refresh that had to wait (edits in flight, a popover or drawer open, a cell being
+   typed in) runs once things go quiet. */
+var tmRefreshWanted=false;
+function tmBusyEditing(){
+  var page=document.getElementById("taskManagerPage");
+  if(document.getElementById("tmPop")||document.getElementById("tmModalMount"))return true;
+  var a=document.activeElement;
+  return !!(a&&page&&page.contains(a)&&(a.isContentEditable||/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)));
+}
+setInterval(function(){
+  if(!tmRefreshWanted||!tmLoaded||!canEdit())return;
+  if(tmPending>0||(typeof writesInFlight!=="undefined"&&writesInFlight>0)||tmBusyEditing())return;
+  var page=document.getElementById("taskManagerPage");if(!page||page.hidden)return;
+  tmRefreshWanted=false;loadProduction(true);
+},4000);
 /* Called by the scheduler when the sheet's revision changes under us. Refreshes
    quietly unless Mr. John is mid-edit in a cell. */
 function tmOnSheetRefresh(){
-  if(!tmLoaded||!canEdit()||tmPending>0)return;
-  var page=document.getElementById("taskManagerPage");if(!page||page.hidden)return;
-  var a=document.activeElement;if(a&&page.contains(a)&&(a.isContentEditable||/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)))return;
+  if(!tmLoaded||!canEdit())return;
+  var page=document.getElementById("taskManagerPage");if(!page||page.hidden){tmRefreshWanted=true;return}
+  if(tmPending>0||(typeof writesInFlight!=="undefined"&&writesInFlight>0)||tmBusyEditing()){tmRefreshWanted=true;return}
   loadProduction(true);
 }
 
@@ -175,10 +202,11 @@ function tmSaveState(state,msg){
 }
 /** One write. Resolves with the backend result; the caller merges result.record. */
 var tmChainLabel="";
-function tmSave(payload){
+function tmSave(payload,opts){
   tmPending++;tmSaveState("saving",tmChainLabel||"Saving…");
   return apiWrite(payload).then(function(r){
     tmPending--;
+    if(r&&r.error&&opts&&opts.quietNotFound&&/Record not found/i.test(r.error)){if(!tmPending)tmSaveState("saved");return r}
     if(!r||r.error){
       var msg=tmErrorText(r);
       tmSaveState("error",msg);toast(msg,"err");
@@ -223,8 +251,11 @@ function tmOptimisticDelete(kind,id,action,after){
   var prev=tmById(list,key,id);if(!prev)return Promise.resolve({success:true});
   var at=list.indexOf(prev);prev=Object.assign({},prev);tmRemove(list,key,id);
   if(after)after();
-  return tmSave({action:action,id:id}).then(function(r){
+  return tmSave({action:action,id:id},{quietNotFound:true}).then(function(r){
     if(r&&!r.error)return r;
+    // "Record not found" means the sheet already lost this row (an earlier attempt that
+    // looked like it failed actually went through). The removal stands; resync quietly.
+    if(r&&/Record not found/i.test(r.error)){tmRefreshWanted=true;tmSaveState("saved","Already removed");return {success:true,alreadyGone:true}}
     list.splice(Math.min(at,list.length),0,prev);tmIndex();if(after)after();   // roll back, same position
     return r;
   });
@@ -293,13 +324,20 @@ function renderTaskManager(){
   h+='<button class="hbtn" onclick="loadProduction(true)" title="Re-download from the sheet">&#8635; Sync</button></div><div id="tmBody"></div></div>';
   document.getElementById("taskManagerPage").innerHTML=h;renderTaskBody();
 }
+/* The page (#taskManagerPage) is the scroll container, not #tmBody — so keep and
+   restore ITS position around a re-render, or every save jumps to the top. */
+function tmKeepScroll(fn){
+  var page=document.getElementById("taskManagerPage"),y=page?page.scrollTop:0;
+  fn();
+  if(page){page.scrollTop=y;requestAnimationFrame(function(){page.scrollTop=y})}
+}
 function renderTaskBody(){
   var mount=document.getElementById("tmBody");if(!mount)return;
-  var y=mount.scrollTop;
-  if(tmView==="sequences")mount.innerHTML=tmRenderSequences();
-  else if(tmView==="people")mount.innerHTML=tmRenderPeople();
-  else mount.innerHTML=tmRenderTodo();
-  mount.scrollTop=y;
+  tmKeepScroll(function(){
+    if(tmView==="sequences")mount.innerHTML=tmRenderSequences();
+    else if(tmView==="people")mount.innerHTML=tmRenderPeople();
+    else mount.innerHTML=tmRenderTodo();
+  });
 }
 
 // ── chips ────────────────────────────────────────────────────
@@ -566,7 +604,11 @@ function tmOnSceneFlag(uid){
 /** Re-render just one sequence row after a change inside it. */
 function tmRefreshSceneRow(uid){
   var tr=document.querySelector('tr[data-scene="'+uid+'"]');
-  if(tr)TM_CELLS.forEach(function(c){var td=tr.querySelector('td[data-cell="'+c.key+'"]');if(td)td.innerHTML=tmCellChips(uid,c)});
+  if(tr){
+    TM_CELLS.forEach(function(c){var td=tr.querySelector('td[data-cell="'+c.key+'"]');if(td)td.innerHTML=tmCellChips(uid,c)});
+    var sc=tr.querySelector(".tm-seqcell");if(sc)sc.innerHTML=tmSeqCellInner(tmScene(uid));
+    tr.className="tm-row"+tmFlagClasses(tmScene(uid));
+  }
   else if(tmView==="sequences")renderTaskBody();
   var modal=document.querySelector('.tm-scene-grid[data-scene-modal="'+uid+'"]');
   if(modal)TM_CELLS.forEach(function(c){var box=modal.querySelector('[data-cell="'+c.key+'"]');if(box)box.innerHTML=tmCellChips(uid,c)});
@@ -685,13 +727,20 @@ function tmOpenReqPop(e,reqId){
     return h;
   });
 }
+/** Re-render only the rows that use an item (in any view that shows scenes). */
+function tmRefreshItemRows(itemId){
+  if(tmView!=="sequences"){renderTaskBody();return}
+  var uids={};(tmIx.reqsByItem[itemId]||[]).forEach(function(r){uids[r.SCENE_UID]=true});
+  Object.keys(uids).forEach(tmRefreshSceneRow);
+  var pal=document.getElementById("tmPaletteList");if(pal)pal.innerHTML=tmPaletteItems();
+}
 function tmPopRenameItem(itemId,value){
   var it=tmIx.items[itemId];value=String(value||"").trim();
   if(!it)return;if(!value){tmPopRender();return}if(value===String(it.NAME||""))return;
-  tmSaveItem(Object.assign({},it,{NAME:value}),function(){renderTaskBody();tmPopRender()});
+  tmSaveItem(Object.assign({},it,{NAME:value}),function(){tmRefreshItemRows(itemId);tmPopRender()});
   toast('Renamed everywhere to “'+value+'”',"ok");
 }
-function tmPopSetItemStatus(itemId,st){var it=tmIx.items[itemId];if(!it||tmStatus(it.STATUS)===st)return;tmSaveItem(Object.assign({},it,{STATUS:st}),function(){renderTaskBody();tmPopRender()})}
+function tmPopSetItemStatus(itemId,st){var it=tmIx.items[itemId];if(!it||tmStatus(it.STATUS)===st)return;tmSaveItem(Object.assign({},it,{STATUS:st}),function(){tmRefreshItemRows(itemId);tmPopRender()})}
 function tmPopSetReqField(reqId,field,value){var r=tmById(production.requirements,"REQUIREMENT_ID",reqId);value=String(value||"").trim();if(!r||String(r[field]||"")===value)return;var rec=Object.assign({},r);rec[field]=value;tmSaveRequirement(rec,function(){tmRefreshSceneRow(r.SCENE_UID);tmPopRender()})}
 function tmPopSetReqNote(reqId,v){var r=tmById(production.requirements,"REQUIREMENT_ID",reqId);if(!r||String(r.NOTES||"")===v.trim())return;tmSaveRequirement(Object.assign({},r,{NOTES:v.trim()}),function(){tmRefreshSceneRow(r.SCENE_UID)})}
 
@@ -818,7 +867,7 @@ function saveItemEditor(id){
   if(item.TYPE==="Location")record.ADDRESS=tmVal("itemAddress");
   var reqJobs=(tmIx.reqsByItem[id]||[]).filter(function(r){return String(r.SCENE_WORDING||"")!==tmVal("reqw-"+r.REQUIREMENT_ID)||String(r.STATUS_OVERRIDE||"")!==tmVal("req-"+r.REQUIREMENT_ID)||String(r.NOTES||"")!==tmVal("reqn-"+r.REQUIREMENT_ID)}).map(function(r){return Object.assign({},r,{SCENE_WORDING:tmVal("reqw-"+r.REQUIREMENT_ID),STATUS_OVERRIDE:tmVal("req-"+r.REQUIREMENT_ID),NOTES:tmVal("reqn-"+r.REQUIREMENT_ID)})});
   tmClose();
-  tmSaveItem(record,renderTaskBody);
+  tmSaveItem(record,function(){tmRefreshItemRows(id)});
   // scene overrides are separate rows; write only the ones that changed
   reqJobs.forEach(function(rec){tmSaveRequirement(rec,renderTaskBody)});
 }
@@ -846,7 +895,7 @@ function openSceneProduction(uid){
   TM_CELLS.forEach(function(c){h+='<div class="tm-field"><label>'+esc(c.label)+'</label><div class="tm-chips" data-cell="'+c.key+'">'+tmCellChips(uid,c)+'</div></div>'});
   h+='</div>';
   h+='<div class="tm-field"><label>Tasks</label><div class="tm-chips">'+tasks.map(function(t){return tmMiniTask(t,false)}).join("")+'<button class="tm-plus" onclick="tmClose();openTaskEditor(null,{type:\'Scene\',id:\''+tmAttr(uid)+'\'})">+</button></div></div>';
-  h+='<div class="tm-field"><label>Scene-only notes</label>'+notes.map(function(n){return'<div class="tm-scene-link"><b>'+esc(n.CATEGORY||"Note")+'</b> '+esc(n.BODY)+' <button class="tm-more" title="Resolve" onclick="tmResolveNote(\''+tmAttr(n.NOTE_ID)+'\',\''+tmAttr(uid)+'\')">✓</button></div>'}).join("");
+  h+='<div class="tm-field"><label>Scene-only notes</label><div id="sceneNotesList">'+tmSceneNotesHtml(uid)+'</div>';
   h+='<div class="tm-pair" style="margin-top:6px"><select class="tm-input" id="sceneNoteCategory" style="max-width:130px"><option>Logistics</option><option>Creative</option><option>Safety</option><option>Schedule</option><option>General</option></select><input class="tm-input" id="sceneNoteBody" placeholder="Add a note that belongs only to this scene" onkeydown="if(event.key===\'Enter\')saveSceneNote(\''+tmAttr(uid)+'\')"><button class="hbtn gold" onclick="saveSceneNote(\''+tmAttr(uid)+'\')">Add</button></div></div>';
   h+='<div class="tm-actions"><button class="mbtn ghost" onclick="tmClose()">Close</button><span class="tm-spacer"></span><button class="mbtn gold" onclick="saveSceneProduction(\''+tmAttr(uid)+'\')">Save sequence</button></div>';tmModal(h);
 }
@@ -855,15 +904,27 @@ function saveSceneProduction(uid){
   var label=tmVal("sceneSeq")||s.seqLabel||s.seq,title=tmVal("sceneTitle"),date=tmVal("sceneShootDay"),order=tmVal("sceneDayOrder"),summary=tmVal("sceneSummary");
   if(!title){toast("The sequence needs a title","err");return}
   var before={seq:s.seq,seqLabel:s.seqLabel,title:s.title,shootDay:s.shootDay,dayOrder:s.dayOrder,shortSummary:s.shortSummary,name:s.name};
+  var changed=before.seqLabel!==label||before.title!==title||String(before.shootDay||"")!==date||String(before.dayOrder===null||before.dayOrder===undefined?"":before.dayOrder)!==order||String(before.shortSummary||"")!==summary;
+  if(!changed){tmSaveState("saved","Nothing changed");return}
   s.seqLabel=label;s.seq=String(label).replace(/SEQ/i,"").trim();s.title=title;s.shootDay=date;s.dayOrder=order===""?null:Number(order);s.shortSummary=summary;s.name=label+" — "+title;
-  renderTaskBody();if(typeof render==="function")render();tmSaveState("saving","Saving sequence…");
+  // update in place: the row, the drawer heading — no full re-render, no reopening
+  tmSchedulerDirty=true;
+  tmRefreshSceneRow(uid);
+  var head=document.querySelector("#tmModalMount h2");if(head)head.textContent=(s.seqLabel||s.seq)+" — "+s.title;
   tmSave({action:"saveScene",scene:{uid:uid,seqLabel:label,title:title,fields:{"SEQ":label,"SCENE TITLE":title,"SCENE SHORT SUMMARY":summary,"SHOOTING DAY":date,"DAY ORDER":order}}}).then(function(r){
-    if(!r||r.error){Object.keys(before).forEach(function(k){s[k]=before[k]});renderTaskBody();if(typeof render==="function")render();return}
-    openSceneProduction(uid);toast(label+" saved · Scheduler updated","ok");
+    if(!r||r.error){Object.keys(before).forEach(function(k){s[k]=before[k]});tmRefreshSceneRow(uid);var h2=document.querySelector("#tmModalMount h2");if(h2)h2.textContent=(s.seqLabel||s.seq)+" — "+s.title;return}
+    toast(label+" saved","ok");
   });
 }
-function saveSceneNote(uid){var body=tmVal("sceneNoteBody");if(!body){toast("Write the note first","err");return}tmSaveNote({NOTE_ID:"",SCOPE_TYPE:"Scene",SCOPE_ID:uid,CATEGORY:tmVal("sceneNoteCategory")||"General",BODY:body,PINNED:false,RESOLVED:false,SOURCE:"Task Manager"},function(){if(document.querySelector('.tm-scene-grid[data-scene-modal="'+uid+'"]'))openSceneProduction(uid)})}
-function tmResolveNote(id,uid){var n=tmById(production.notes,"NOTE_ID",id);if(!n)return;tmSaveNote(Object.assign({},n,{RESOLVED:true}),function(){if(document.querySelector('.tm-scene-grid[data-scene-modal="'+uid+'"]'))openSceneProduction(uid)})}
+function tmSceneNotesHtml(uid){
+  var notes=production.notes.filter(function(n){return n.SCOPE_TYPE==="Scene"&&n.SCOPE_ID===uid&&!tmBool(n.RESOLVED)});
+  return notes.map(function(n){return'<div class="tm-scene-link"><b>'+esc(n.CATEGORY||"Note")+'</b> '+esc(n.BODY)+' <button class="tm-more" title="Resolve" onclick="tmResolveNote(\''+tmAttr(n.NOTE_ID)+'\',\''+tmAttr(uid)+'\')">✓</button></div>'}).join("");
+}
+/* Notes update only their own list inside the drawer — the rest of the drawer, the
+   fields you may be typing in, and the scroll position stay exactly where they were. */
+function tmRefreshSceneNotes(uid){var el=document.getElementById("sceneNotesList");if(el&&document.querySelector('.tm-scene-grid[data-scene-modal="'+uid+'"]'))el.innerHTML=tmSceneNotesHtml(uid)}
+function saveSceneNote(uid){var body=tmVal("sceneNoteBody");if(!body){toast("Write the note first","err");return}var inp=document.getElementById("sceneNoteBody");if(inp)inp.value="";tmSaveNote({NOTE_ID:"",SCOPE_TYPE:"Scene",SCOPE_ID:uid,CATEGORY:tmVal("sceneNoteCategory")||"General",BODY:body,PINNED:false,RESOLVED:false,SOURCE:"Task Manager"},function(){tmRefreshSceneNotes(uid)})}
+function tmResolveNote(id,uid){var n=tmById(production.notes,"NOTE_ID",id);if(!n)return;tmSaveNote(Object.assign({},n,{RESOLVED:true}),function(){tmRefreshSceneNotes(uid)})}
 
 function openStaffingEditor(id,uid){
   var st=id?tmById(production.staffing,"STAFFING_ID",id):null,s=tmScene(uid);
@@ -883,8 +944,8 @@ function saveStaffingEditor(id,uid,seq){
   var people=Array.prototype.filter.call(document.querySelectorAll(".staffPerson"),function(c){return c.checked}).map(function(c){return c.value});
   var record={STAFFING_ID:id,SCENE_UID:uid,SEQ:seq,DEPARTMENT:tmVal("staffDept")||"Crew",ROLE:tmVal("staffRole"),NEEDED:needed,ASSIGNED_PERSON_IDS:people.join("; "),CONFIRMED_COUNT:confirmed,GAP:Math.max(0,needed-confirmed),NOTES:tmVal("staffNotes")};
   if(!record.ROLE){toast("Give the role a name","err");return}
-  tmSaveStaffing(record,function(){renderTaskBody();if(document.querySelector('.tm-scene-grid[data-scene-modal="'+uid+'"]'))openSceneProduction(uid)});
-  openSceneProduction(uid);
+  tmSaveStaffing(record,function(){tmRefreshSceneRow(uid)});
+  openSceneProduction(uid);   // back to the drawer, once
 }
 
 /** Existing person, or a blank form when id is null. */
