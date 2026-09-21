@@ -350,6 +350,9 @@ var people=[];         // Cast & Producers (no contact details)
 var locMeta=[];        // Locations tab
 var settings={};
 var rev=-1, polling=null, writesInFlight=0, refetchQueued=false, writeQueue=Promise.resolve();
+/* Edits show instantly but reach the sheet one at a time. Closing the tab while some
+   are still queued would lose them — ask first. */
+window.addEventListener("beforeunload",function(e){if(writesInFlight>0){e.preventDefault();e.returnValue="Some changes are still saving to the sheet."}});
 
 var yr=2026,mo=8,selDay=null,dragId=null;
 var sortMode="seq";    // unscheduled sort: seq | complexity | location
