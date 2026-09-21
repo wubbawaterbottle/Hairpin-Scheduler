@@ -349,7 +349,7 @@ var days={};           // dateKey -> {label,call,wrap,notes}
 var people=[];         // Cast & Producers (no contact details)
 var locMeta=[];        // Locations tab
 var settings={};
-var rev=-1, polling=null, writesInFlight=0, refetchQueued=false;
+var rev=-1, polling=null, writesInFlight=0, refetchQueued=false, writeQueue=Promise.resolve();
 
 var yr=2026,mo=8,selDay=null,dragId=null;
 var sortMode="seq";    // unscheduled sort: seq | complexity | location
@@ -406,11 +406,11 @@ function fmtMin(m){return Math.floor(m/60)+":"+pad2(m%60)}
 function fmtDK(k){var p=String(k).split("-");if(p.length!==3)return k;return MO[parseInt(p[1],10)-1].slice(0,3)+" "+parseInt(p[2],10)}
 
 // ── JSONP ────────────────────────────────────────────────────
-function api(params){
+function api(params,timeoutMs){
   return new Promise(function(resolve){
     var cb="jcb_"+Date.now()+"_"+Math.floor(Math.random()*10000);
     var sc=document.createElement("script");var done=false;
-    var t=setTimeout(function(){if(done)return;done=true;delete window[cb];if(sc.parentNode)sc.parentNode.removeChild(sc);resolve({error:"Timeout"})},25000);
+    var t=setTimeout(function(){if(done)return;done=true;delete window[cb];if(sc.parentNode)sc.parentNode.removeChild(sc);resolve({error:"Timeout"})},timeoutMs||25000);
     window[cb]=function(data){if(done)return;done=true;clearTimeout(t);delete window[cb];if(sc.parentNode)sc.parentNode.removeChild(sc);resolve(data)};
     sc.onerror=function(){if(done)return;done=true;clearTimeout(t);delete window[cb];if(sc.parentNode)sc.parentNode.removeChild(sc);resolve({error:"Network error"})};
     sc.src=API_URL+"?"+params+"&callback="+cb;
@@ -424,7 +424,13 @@ function apiWrite(p){
     return Promise.resolve({error:"locked"});
   }
   writesInFlight++;setLive(true);
-  return api("payload="+encodeURIComponent(JSON.stringify(p))+"&key="+encodeURIComponent(editKey))
+  // Writes go out one at a time. Each one now does real work in the sheet, and two
+  // at once would fight over the document lock — one would fail and the app would
+  // roll its change back. Serialising keeps every edit, in order.
+  var send=function(){return api("payload="+encodeURIComponent(JSON.stringify(p))+"&key="+encodeURIComponent(editKey),90000)};
+  var run=writeQueue.then(send,send);
+  writeQueue=run.then(function(){},function(){});
+  return run
     .then(function(r){
       writesInFlight--;setLive(false);
       if(r&&r.error==="locked"){          // key rejected — drop it and re-ask
