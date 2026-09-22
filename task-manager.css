@@ -245,3 +245,84 @@
 
 @media(max-width:1100px){.tm-split{grid-template-columns:1fr}.tm-palette{position:static;max-height:260px}}
 @media(max-width:900px){.app-tabs{order:3;width:100%;justify-content:center}.app-tab{flex:1}.tm-page{height:calc(100vh - var(--hdr,98px));padding:11px}.tm-form-grid{grid-template-columns:1fr}.tm-field.full{grid-column:auto}.tm-statuses{grid-template-columns:1fr 1fr}.brand-date{gap:8px}.today-date{font-size:9px;min-width:44px}.tm-search{width:100%;margin-left:0}.tm-sticky{position:static}}
+
+/* ═══ Call / text / email (People) ═══ */
+.tm-short{display:none}
+.tm-acts{display:flex;gap:4px;flex-wrap:wrap;margin:0 0 4px}
+.tm-act{font-size:10px;font-weight:600;padding:2px 9px;border:1px solid #3f5568;border-radius:10px;color:#9ecbf0;text-decoration:none;line-height:1.6}
+.tm-act:hover{border-color:#6fa8dc}
+
+/* ═══ PHONES: every table becomes a stack of cards ═══
+   Rows turn into cards; each cell shows its column name on the left (from
+   data-label in task-manager.js). Nothing is hidden that you can edit. */
+@media(max-width:760px){
+  .tm-long,.tm-hide-phone,.tm-authority{display:none}
+  .tm-short{display:inline}
+  /* Saving… / Saved floats at the bottom so it's visible wherever you've scrolled */
+  .tm-save{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:900;min-width:0;
+           background:#231e1a;border:1px solid #3a342e;border-radius:16px;padding:6px 14px;font-size:12px;box-shadow:0 4px 18px rgba(0,0,0,.5);pointer-events:none}
+  .tm-save:empty{display:none}
+  .tm-page{padding:10px 10px 70px;height:calc(100dvh - var(--hdr,98px))}
+  .tm-toolbar{gap:8px;margin-bottom:10px}
+  .tm-subtabs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;width:100%}
+  .tm-subtab{padding:10px 4px;text-align:center;font-size:12px}
+  .tm-search{flex:1 1 0;min-width:0;width:auto;font-size:16px}   /* 16px stops iOS zooming on focus */
+  .tm-todo-head{gap:8px}
+  .tm-todo-head .tm-select{flex:1 1 0;min-width:0}
+  .tm-filters{display:flex;gap:4px;overflow-x:auto;flex-wrap:nowrap;width:100%;padding-bottom:2px;-webkit-overflow-scrolling:touch}
+  .tm-filters .tm-subtab{flex:0 0 auto}
+
+  .tm-table,.tm-table tbody,.tm-table td{display:block;width:100%}
+  .tm-table{table-layout:auto;border:0;background:none;border-radius:0;overflow:visible}
+  .tm-table thead{display:none}
+  .tm-table-wrap{border:0;background:none;overflow:visible}
+  .tm-table tr{display:flex;flex-wrap:wrap;position:relative;width:100%}
+  .tm-table tr.tm-row{background:#1a1714;border:1px solid #2a2520;border-radius:10px;margin-bottom:10px;overflow:hidden}
+  .tm-table tr.tm-row:hover td{background:none}
+  .tm-table td{flex:1 1 100%;min-width:0;border-bottom:1px solid #221e1a;padding:9px 12px;font-size:13px}
+  .tm-table tr td:last-child{border-bottom:0}
+  .tm-table td[data-label]{position:relative;padding-left:98px;min-height:36px}
+  .tm-table td[data-label]::before{content:attr(data-label);position:absolute;left:12px;top:11px;width:80px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:#7c7167;line-height:1.3}
+  .tm-table .tm-mini-select,.tm-table .tm-date,.tm-table select{min-height:34px;max-width:100%}
+  .tm-table .tm-edit{font-size:13px;min-height:22px}
+  .tm-cell-notes,.tm-cell-link{min-width:0}
+  .tm-col-more{position:absolute!important;top:4px;right:4px;width:auto!important;flex:none!important;border:0!important;padding:4px!important}
+  .tm-more{font-size:18px;padding:4px 10px}
+  .tm-plus{width:30px;height:30px;border-radius:15px;font-size:17px;opacity:1}
+  .tm-chip{font-size:12px;padding:3px 9px 3px 7px}
+
+  /* Sequences: the SEQ cell is the card's header */
+  .tm-seq .tm-seqcell{background:#231e1a;border-bottom:1px solid #3a342e;padding:11px 12px}
+  .tm-seq .tm-seqcell b{font-size:15px}
+  .tm-seq .tm-seqtitle{font-size:13px}
+  .tm-seq tr.pickup .tm-seqcell{box-shadow:inset 4px 0 0 #9b7bff}
+  .tm-seq td.tm-cell:not(:has(.tm-chip)):not(:has(.tm-minitask)){min-height:0;padding-top:5px;padding-bottom:5px}
+  .tm-seq td.tm-cell:not(:has(.tm-chip)):not(:has(.tm-minitask))::before{top:12px;color:#5a5248}
+
+  /* To-do: tick + title share the top line; drag handles don't work by touch */
+  .tm-todo .tm-col-drag{display:none}
+  .tm-todo .tm-col-check{flex:0 0 46px;border-bottom:0;padding:11px 0 0 14px}
+  .tm-todo .tm-check{width:20px;height:20px}
+  .tm-todo .tm-cell-title{flex:1 1 calc(100% - 46px);border-bottom:0;padding:10px 46px 10px 4px;font-size:14px}
+  /* Status and Due share a row, labels above */
+  .tm-table.tm-todo td.tm-col-status,.tm-table.tm-todo td.tm-col-date{flex:1 1 40%;padding:8px 12px 10px;border-top:1px solid #221e1a}
+  .tm-table.tm-todo td.tm-col-date{border-left:1px solid #221e1a}
+  .tm-table.tm-todo td.tm-col-status::before,.tm-table.tm-todo td.tm-col-date::before{position:static;display:block;width:auto;margin-bottom:3px}
+  .tm-table.tm-todo td.tm-col-status select,.tm-table.tm-todo td.tm-col-date input{width:100%}
+  .tm-group-head{flex-wrap:wrap}
+  .tm-drop-hint td{padding:14px;text-align:center}
+
+  /* Drawers and editors: full screen, buttons pinned to the bottom */
+  .tm-modal-bg{padding:0;align-items:stretch}
+  .tm-modal{width:100%;max-height:none;height:100dvh;border-radius:0;border:0;padding:16px 14px 0}
+  .tm-modal h2{font-size:20px;padding-right:8px}
+  .tm-modal .tm-actions{position:sticky;bottom:0;z-index:3;background:#1e1b18;margin:14px -14px 0;padding:10px 14px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -8px 16px -8px rgba(0,0,0,.6)}
+  .tm-modal .tm-actions .mbtn{padding:11px 16px;font-size:14px}
+  .tm-scene-grid{grid-template-columns:minmax(0,1fr)}
+
+  /* People: the name is the header */
+  .tm-people .tm-namecell{background:#231e1a;border-bottom:1px solid #3a342e;padding:11px 50px 11px 12px}
+  .tm-people .tm-namecell .tm-chip{font-size:14px}
+  .tm-people td.tm-col-num{text-align:left}
+  .tm-people .tm-edit{max-height:none}
+}
