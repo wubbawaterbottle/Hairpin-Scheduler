@@ -317,9 +317,9 @@ function renderTaskManager(){
   updateToday();
   if(!canEdit()){tmLoadError("Unlock editing to view private production details, contracts, assignments and notes.");return}
   if(!tmLoaded){loadProduction();return}
-  var tabs=[["sequences","Sequences · Master"],["todo","To-do"],["people","People & Contracts"]];
+  var tabs=[["sequences","Sequences · Master","Sequences"],["todo","To-do","To-do"],["people","People & Contracts","People"]];
   var h='<div class="tm-shell"><div class="tm-toolbar"><div class="tm-subtabs">';
-  for(var i=0;i<tabs.length;i++)h+='<button class="tm-subtab '+(tmView===tabs[i][0]?"active":"")+'" onclick="tmSetView(\''+tabs[i][0]+'\')">'+tabs[i][1]+'</button>';
+  for(var i=0;i<tabs.length;i++)h+='<button class="tm-subtab '+(tmView===tabs[i][0]?"active":"")+'" onclick="tmSetView(\''+tabs[i][0]+'\')"><span class="tm-long">'+tabs[i][1]+'</span><span class="tm-short">'+tabs[i][2]+'</span></button>';
   h+='</div><span class="tm-authority" title="Sequence records drive Scheduler and Calendar">Sequences → Scheduler → Calendar</span><span id="tmSaveState" class="tm-save"></span><input class="tm-search" value="'+tmAttr(tmQuery)+'" placeholder="Search" oninput="tmSetQuery(this.value)">';
   h+='<button class="hbtn" onclick="loadProduction(true)" title="Re-download from the sheet">&#8635; Sync</button></div><div id="tmBody"></div></div>';
   document.getElementById("taskManagerPage").innerHTML=h;renderTaskBody();
@@ -433,13 +433,14 @@ function tmTaskRow(t){
   h+='<td class="tm-col-drag"><span class="tm-handle" draggable="true" ondragstart="tmStartDrag(event,\'Task\',\''+tmAttr(id)+'\')" title="Drag to reorder or hand to someone">⋮⋮</span></td>';
   h+='<td class="tm-col-check"><input class="tm-check" type="checkbox" '+(done?'checked':'')+' onchange="tmPatch(\'task\',\''+tmAttr(id)+'\',\'DONE\',this.checked)"></td>';
   h+='<td class="tm-cell-title"><div class="tm-edit" contenteditable="true" spellcheck="false" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'task\',\''+tmAttr(id)+'\',\'TITLE\')">'+esc(t.TITLE)+'</div></td>';
-  h+='<td class="tm-col-status">'+tmStatusSelect("task",id,"STATUS_COLOR",t.STATUS_COLOR)+'</td>';
-  h+='<td class="tm-col-date '+tmDueClass(done?"":t.DUE_DATE)+'"><input class="tm-date" type="date" value="'+tmAttr(String(t.DUE_DATE||"").slice(0,10))+'" onchange="tmPatch(\'task\',\''+tmAttr(id)+'\',\'DUE_DATE\',this.value)"></td>';
-  h+='<td class="tm-cell-link">'+tmLinkChip(t)+'</td>';
-  h+='<td class="tm-cell-notes"><div class="tm-edit" contenteditable="true" spellcheck="false" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'task\',\''+tmAttr(id)+'\',\'NOTES\')">'+esc(t.NOTES||"")+'</div></td>';
+  h+='<td class="tm-col-status" data-label="Status">'+tmStatusSelect("task",id,"STATUS_COLOR",t.STATUS_COLOR)+'</td>';
+  h+='<td class="tm-col-date '+tmDueClass(done?"":t.DUE_DATE)+'" data-label="Due"><input class="tm-date" type="date" value="'+tmAttr(String(t.DUE_DATE||"").slice(0,10))+'" onchange="tmPatch(\'task\',\''+tmAttr(id)+'\',\'DUE_DATE\',this.value)"></td>';
+  h+='<td class="tm-cell-link" data-label="Linked">'+tmLinkChip(t)+'</td>';
+  h+='<td class="tm-cell-notes" data-label="Notes"><div class="tm-edit" contenteditable="true" spellcheck="false" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'task\',\''+tmAttr(id)+'\',\'NOTES\')">'+esc(t.NOTES||"")+'</div></td>';
   tmCols.forEach(function(c){
     var editable=c==="TASK_TYPE"||c==="DUE_NOTE";
-    h+='<td>'+(editable?'<div class="tm-edit" contenteditable="true" spellcheck="false" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'task\',\''+tmAttr(id)+'\',\''+c+'\')">'+esc(t[c]||"")+'</div>':'<span class="tm-muted">'+esc(String(t[c]||"").slice(0,10))+'</span>')+'</td>';
+    var cl=tmById(TM_OPTIONAL_COLS.map(function(x){return{k:x[0],l:x[1]}}),"k",c);
+    h+='<td data-label="'+tmAttr(cl?cl.l:c)+'">'+(editable?'<div class="tm-edit" contenteditable="true" spellcheck="false" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'task\',\''+tmAttr(id)+'\',\''+c+'\')">'+esc(t[c]||"")+'</div>':'<span class="tm-muted">'+esc(String(t[c]||"").slice(0,10))+'</span>')+'</td>';
   });
   h+='<td class="tm-col-more"><button class="tm-more" title="Open task" onclick="openTaskEditor(\''+tmAttr(id)+'\')">⋯</button></td></tr>';
   return h;
@@ -560,6 +561,14 @@ function tmSceneOpenTasks(uid){
   return out;
 }
 function tmSortArrow(key){return tmSeqSort.key===key?'<span class="tm-sortarrow">'+(tmSeqSort.dir>0?'▲':'▼')+'</span>':''}
+/* Phones: one tap to call, text or email. The contact cells themselves stay editable,
+   so tapping the number edits it rather than dialling — these sit beside it. */
+function tmContactActions(p){
+  var ph=String(p.PHONE||"").replace(/[^\d+]/g,""),em=String(p.EMAIL||"").trim(),h="";
+  if(ph.length>=7)h+='<a class="tm-act" href="tel:'+tmAttr(ph)+'" title="Call">Call</a><a class="tm-act" href="sms:'+tmAttr(ph)+'" title="Text">Text</a>';
+  if(/@/.test(em))h+='<a class="tm-act" href="mailto:'+tmAttr(em)+'" title="Email">Email</a>';
+  return h?'<div class="tm-acts">'+h+'</div>':'';
+}
 function tmRenderSequences(){
   var rows=scenes.filter(function(s){
     if(!tmQuery)return true;
@@ -570,7 +579,7 @@ function tmRenderSequences(){
   var h='<div class="tm-todo-head"><label class="tm-muted">Sort</label><select class="tm-select" onchange="tmSetSeqSort(this.value,1)">'+TM_SORTS.map(function(o){return'<option value="'+o[0]+'"'+(tmSeqSort.key===o[0]?' selected':'')+'>'+esc(o[1])+'</option>'}).join("")+'</select>';
   h+='<button class="hbtn" title="Flip direction" onclick="tmSetSeqSort(tmSeqSort.key,-tmSeqSort.dir)">'+(tmSeqSort.dir>0?'▲ ascending':'▼ descending')+'</button>';
   if(tmSeqSort.key!=="seq")h+='<button class="hbtn" onclick="tmSetSeqSort(\'seq\',1)">Back to scene order</button>';
-  h+='<span class="tm-muted">'+rows.length+' sequences · click a column header to sort by it</span></div>';
+  h+='<span class="tm-muted">'+rows.length+' sequences<span class="tm-hide-phone"> · click a column header to sort by it</span></span></div>';
   h+='<table class="tm-table tm-seq"><thead><tr><th class="tm-seqhead tm-sortable" onclick="tmSetSeqSort(tmSeqSort.key===\'seq\'?\'day\':\'seq\',1)" title="Click: scene order ↔ shoot date">Sequence'+(tmSeqSort.key==="day"?' <span class="tm-faint">by shoot date</span>':'')+tmSortArrow(tmSeqSort.key==="day"?"day":"seq")+'</th>';
   TM_CELLS.forEach(function(c){h+='<th class="tm-sortable" onclick="tmSetSeqSort(\''+c.key+'\')" title="Sort by '+tmAttr(c.label)+'">'+esc(c.label)+tmSortArrow(c.key)+'</th>'});
   h+='<th class="tm-sortable" onclick="tmSetSeqSort(\'tasks\')" title="Sort by open tasks">Tasks'+tmSortArrow("tasks")+'</th></tr></thead><tbody>';
@@ -579,8 +588,8 @@ function tmRenderSequences(){
     var itemTasks=[];(tmIx.reqsByScene[s.uid]||[]).forEach(function(r){(tmIx.tasksByItem[r.ITEM_ID]||[]).forEach(function(t){if(!tmBool(t.DONE)&&itemTasks.indexOf(t)<0&&tasks.indexOf(t)<0)itemTasks.push(t)})});
     h+='<tr class="tm-row'+tmFlagClasses(s)+'" data-scene="'+tmAttr(s.uid)+'">';
     h+='<td class="tm-seqcell" onclick="openSceneProduction(\''+tmAttr(s.uid)+'\')">'+tmSeqCellInner(s)+'</td>';
-    TM_CELLS.forEach(function(c){h+='<td class="tm-cell" data-cell="'+c.key+'">'+tmCellChips(s.uid,c)+'</td>'});
-    h+='<td class="tm-cell tm-taskcell">'+tasks.map(function(t){return tmMiniTask(t,false)}).join("")+itemTasks.map(function(t){return tmMiniTask(t,true)}).join("")+'<button class="tm-plus" title="New task for this sequence" onclick="event.stopPropagation();openTaskEditor(null,{type:\'Scene\',id:\''+tmAttr(s.uid)+'\'})">+</button></td></tr>';
+    TM_CELLS.forEach(function(c){h+='<td class="tm-cell" data-cell="'+c.key+'" data-label="'+tmAttr(c.label)+'">'+tmCellChips(s.uid,c)+'</td>'});
+    h+='<td class="tm-cell tm-taskcell" data-label="Tasks">'+tasks.map(function(t){return tmMiniTask(t,false)}).join("")+itemTasks.map(function(t){return tmMiniTask(t,true)}).join("")+'<button class="tm-plus" title="New task for this sequence" onclick="event.stopPropagation();openTaskEditor(null,{type:\'Scene\',id:\''+tmAttr(s.uid)+'\'})">+</button></td></tr>';
   });
   return h+'</tbody></table>';
 }
@@ -804,14 +813,14 @@ function tmRenderPeople(){
     var seqs=[];sc.forEach(function(x){var s=tmScene(x.SCENE_UID);if(seqs.indexOf(s.seqLabel)<0)seqs.push(s.seqLabel)});
     h+='<tr class="tm-row'+(active?'':' removed')+'" data-person="'+tmAttr(id)+'">';
     h+='<td class="tm-namecell"><span class="tm-chip st-'+st+'" draggable="true" ondragstart="tmStartDrag(event,\'Person\',\''+tmAttr(id)+'\')" title="Open"><i class="tm-dot '+st+'"></i><span class="tm-edit tm-inline" contenteditable="true" spellcheck="false" onclick="event.stopPropagation()" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'NAME\')">'+esc(p.NAME)+'</span></span>'+(active?'':'<div class="tm-faint">removed</div>')+'</td>';
-    h+='<td><select class="tm-mini-select" onchange="tmPatch(\'person\',\''+tmAttr(id)+'\',\'GROUPS\',this.value)">'+tmGroupOptions(p.GROUPS)+'</select></td>';
-    h+='<td><div class="tm-edit" contenteditable="true" spellcheck="false" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'ROLES_CHARACTERS\')">'+esc(p.ROLES_CHARACTERS||"")+'</div></td>';
-    h+='<td><select class="tm-mini-select" onchange="tmPatch(\'person\',\''+tmAttr(id)+'\',\'PROJECT_STATUS\',this.value)">'+TM_PROJECT.map(function(v){return'<option'+(p.PROJECT_STATUS===v?' selected':'')+'>'+v+'</option>'}).join("")+'</select></td>';
-    h+='<td><select class="tm-mini-select ct-'+st+'" onchange="tmPatch(\'person\',\''+tmAttr(id)+'\',\'CONTRACT_STATUS\',this.value)">'+TM_CONTRACT.map(function(v){return'<option value="'+v+'"'+((p.CONTRACT_STATUS||"")===v?' selected':'')+'>'+(v||"—")+'</option>'}).join("")+'</select><div class="tm-edit tm-sub" contenteditable="true" spellcheck="false" data-ph="version" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'CONTRACT_VERSION\')">'+esc(p.CONTRACT_VERSION||"")+'</div></td>';
-    h+='<td><div class="tm-edit tm-sub" contenteditable="true" spellcheck="false" data-ph="phone" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'PHONE\')">'+esc(p.PHONE||"")+'</div><div class="tm-edit tm-sub" contenteditable="true" spellcheck="false" data-ph="email" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'EMAIL\')">'+esc(p.EMAIL||"")+'</div></td>';
-    h+='<td class="tm-muted tm-col-num" title="'+tmAttr(seqs.join(", "))+'">'+(seqs.length?seqs.length:'—')+'</td>';
-    h+='<td class="tm-wide"><div class="tm-edit" contenteditable="true" spellcheck="false" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'AVAILABILITY\')">'+esc(p.AVAILABILITY||"")+'</div></td>';
-    h+='<td class="tm-wide"><div class="tm-edit" contenteditable="true" spellcheck="false" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'NOTES\')">'+esc(p.NOTES||"")+'</div></td>';
+    h+='<td data-label="Group"><select class="tm-mini-select" onchange="tmPatch(\'person\',\''+tmAttr(id)+'\',\'GROUPS\',this.value)">'+tmGroupOptions(p.GROUPS)+'</select></td>';
+    h+='<td data-label="Role"><div class="tm-edit" contenteditable="true" spellcheck="false" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'ROLES_CHARACTERS\')">'+esc(p.ROLES_CHARACTERS||"")+'</div></td>';
+    h+='<td data-label="Attachment"><select class="tm-mini-select" onchange="tmPatch(\'person\',\''+tmAttr(id)+'\',\'PROJECT_STATUS\',this.value)">'+TM_PROJECT.map(function(v){return'<option'+(p.PROJECT_STATUS===v?' selected':'')+'>'+v+'</option>'}).join("")+'</select></td>';
+    h+='<td data-label="Contract"><select class="tm-mini-select ct-'+st+'" onchange="tmPatch(\'person\',\''+tmAttr(id)+'\',\'CONTRACT_STATUS\',this.value)">'+TM_CONTRACT.map(function(v){return'<option value="'+v+'"'+((p.CONTRACT_STATUS||"")===v?' selected':'')+'>'+(v||"—")+'</option>'}).join("")+'</select><div class="tm-edit tm-sub" contenteditable="true" spellcheck="false" data-ph="version" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'CONTRACT_VERSION\')">'+esc(p.CONTRACT_VERSION||"")+'</div></td>';
+    h+='<td data-label="Contact">'+tmContactActions(p)+'<div class="tm-edit tm-sub" contenteditable="true" spellcheck="false" data-ph="phone" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'PHONE\')">'+esc(p.PHONE||"")+'</div><div class="tm-edit tm-sub" contenteditable="true" spellcheck="false" data-ph="email" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'EMAIL\')">'+esc(p.EMAIL||"")+'</div></td>';
+    h+='<td class="tm-muted tm-col-num" data-label="Scenes" title="'+tmAttr(seqs.join(", "))+'">'+(seqs.length?seqs.length:'—')+'</td>';
+    h+='<td class="tm-wide" data-label="Availability"><div class="tm-edit" contenteditable="true" spellcheck="false" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'AVAILABILITY\')">'+esc(p.AVAILABILITY||"")+'</div></td>';
+    h+='<td class="tm-wide" data-label="Notes"><div class="tm-edit" contenteditable="true" spellcheck="false" onkeydown="tmEditKey(event,this)" onblur="tmEditText(this,\'person\',\''+tmAttr(id)+'\',\'NOTES\')">'+esc(p.NOTES||"")+'</div></td>';
     h+='<td class="tm-col-more"><button class="tm-more" title="Open · replace · remove" onclick="openPersonEditor(\''+tmAttr(id)+'\')">⋯</button></td></tr>';
   });
   h+='</tbody></table>';
