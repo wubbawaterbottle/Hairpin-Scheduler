@@ -52,6 +52,9 @@ button,input,textarea,select{font-family:inherit}
 .cal-wrap{flex:1;overflow-y:auto;padding:14px}
 .cal-nav{display:flex;justify-content:center;align-items:center;gap:14px;margin-bottom:14px}
 .cal-nav button{background:none;border:1px solid #3a342e;color:#a09585;width:28px;height:28px;border-radius:5px;cursor:pointer;font-size:14px}
+.cal-nav button.cal-today{width:auto;padding:0 10px;font-size:11px;letter-spacing:.4px;color:#9ecbf0;border-color:#3f5568}
+.cal-nav button.cal-today:hover{border-color:#6fa8dc}
+.cal-nav button.cal-today[disabled]{opacity:.35;cursor:default;border-color:#3a342e;color:#6a5e52}
 .cal-nav h2{font-family:'EB Garamond',Georgia,serif;font-size:18px;font-weight:400;color:#e8d5a0;min-width:160px;text-align:center}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
 .cal-head{text-align:center;font-size:9px;color:#6a5e52;padding:5px 0;text-transform:uppercase;letter-spacing:1px}
@@ -59,6 +62,11 @@ button,input,textarea,select{font-family:inherit}
 .cal-day:hover{border-color:#3a342e}
 .cal-day.sel{border:1.5px solid #c49b2a;background:#2a2520}
 .cal-day.we{background:rgba(26,23,20,.53)}
+/* Today: a cool blue ring so it never reads as "selected" (gold) or "shot" (cream). */
+.cal-day.today{border:1.5px solid #6fa8dc;box-shadow:inset 0 0 0 1px rgba(111,168,220,.25)}
+.cal-day.today .dnum span{color:#9ecbf0;font-weight:700}
+.cal-day.today .dnum span:first-child::after{content:"TODAY";font-size:7px;letter-spacing:.6px;margin-left:5px;padding:1px 4px;border-radius:8px;background:rgba(111,168,220,.18);color:#9ecbf0;vertical-align:1px}
+.cal-day.today.sel{border-color:#c49b2a;box-shadow:inset 0 0 0 2px rgba(111,168,220,.45)}
 .cal-day .dnum{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px}
 .cal-day .dnum span{font-size:11px;font-weight:600;color:#a09585}
 .cal-day.sel .dnum span{color:#e8d5a0}
@@ -354,7 +362,10 @@ var rev=-1, polling=null, writesInFlight=0, refetchQueued=false, writeQueue=Prom
    are still queued would lose them — ask first. */
 window.addEventListener("beforeunload",function(e){if(writesInFlight>0){e.preventDefault();e.returnValue="Some changes are still saving to the sheet."}});
 
-var yr=2026,mo=8,selDay=null,dragId=null;
+/* The calendar opens on the real current month, not a hardcoded one. */
+var TODAY=new Date();
+var TODAY_KEY=mkdk(TODAY.getFullYear(),TODAY.getMonth(),TODAY.getDate());
+var yr=TODAY.getFullYear(),mo=TODAY.getMonth(),selDay=null,dragId=null;
 var sortMode="seq";    // unscheduled sort: seq | complexity | location
 var sortModeS="date";  // scheduled sort: date | seq | complexity | location
 var openUn=true, openSch=true;
@@ -588,7 +599,16 @@ function buildCatList(cats,order){
 function startPolling(){
   if(polling)clearInterval(polling);
   polling=setInterval(checkRev,45000);
-  document.addEventListener("visibilitychange",function(){if(!document.hidden)checkRev()});
+  document.addEventListener("visibilitychange",function(){if(!document.hidden){rollToday();checkRev()}});
+  /* Left open overnight, the TODAY ring would stay on yesterday. */
+  setInterval(rollToday,60000);
+}
+/** Move the today marker when the clock crosses midnight. Redraws only if it changed. */
+function rollToday(){
+  var n=new Date(),k=mkdk(n.getFullYear(),n.getMonth(),n.getDate());
+  if(k===TODAY_KEY)return;
+  TODAY=n;TODAY_KEY=k;
+  if(typeof render==="function")render();
 }
 function checkRev(){
   if(document.hidden)return;
@@ -910,7 +930,9 @@ function renderCal(){
   var unschedCount=0,schedCount=0;
   for(var i=0;i<scenes.length;i++){if(scenes[i].shootDay)schedCount++;else unschedCount++}
 
-  var h='<div class="cal-nav"><button onclick="prevMo()">&#8249;</button><h2>'+MO[mo]+' '+yr+'</h2><button onclick="nextMo()">&#8250;</button></div><div class="cal-grid">';
+  var onNow=(yr===TODAY.getFullYear()&&mo===TODAY.getMonth());
+  var h='<div class="cal-nav"><button onclick="prevMo()">&#8249;</button><h2>'+MO[mo]+' '+yr+'</h2><button onclick="nextMo()">&#8250;</button>'
+       +'<button class="cal-today" onclick="goToday()" title="Jump to today"'+(onNow?' disabled':'')+'>Today</button></div><div class="cal-grid">';
   for(var i=0;i<7;i++)h+='<div class="cal-head">'+DN[i]+'</div>';
   for(var i=0;i<fd;i++)h+='<div></div>';
   for(var d=1;d<=dim;d++){
@@ -924,7 +946,7 @@ function renderCal(){
       for(var j=0;j<ds.length;j++){if(hlMatch(ds[j]))hit.push(ds[j]);else miss.push(ds[j])}
       hitCount=hit.length;ds=hit.concat(miss);
     }
-    var cls="cal-day"+(sel?" sel":"")+(we?" we":"");
+    var cls="cal-day"+(sel?" sel":"")+(we?" we":"")+(k===TODAY_KEY?" today":"");
     if(HLON)cls+=hitCount?" hl-hit":" hl-dim";
     var shotN=0,pkN=0;for(var j=0;j<ds.length;j++){if(isShot(ds[j]))shotN++;if(needsPickup(ds[j]))pkN++}
     if(ds.length&&shotN===ds.length)cls+=" alldone";
@@ -1171,6 +1193,7 @@ function cycleAvail(catKey,idx){
 // ── ACTIONS ──────────────────────────────────────────────────
 function prevMo(){if(mo===0){mo=11;yr--}else mo--;render()}
 function nextMo(){if(mo===11){mo=0;yr++}else mo++;render()}
+function goToday(){var n=new Date();TODAY=n;TODAY_KEY=mkdk(n.getFullYear(),n.getMonth(),n.getDate());yr=n.getFullYear();mo=n.getMonth();render()}
 function selectDay(d){selDay=selDay===d?null:d;initDpAvail();render();if(selDay)renderDayPanel(selDay)}
 function closeDay(){selDay=null;document.getElementById("dayPanelMount").innerHTML="";render()}
 
