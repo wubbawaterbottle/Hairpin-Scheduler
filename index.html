@@ -125,6 +125,7 @@ button,input,textarea,select{font-family:inherit}
 .stats .s{text-align:center}
 .stats .s .n{font-size:18px;font-weight:700}
 .stats .s .l{font-size:8px;color:#8497a8;text-transform:uppercase}
+.stats .s .n .pc{font-size:12px;font-weight:600;color:#a9c4d8;margin-left:7px}
 .daypanel{position:fixed;right:0;top:0;bottom:0;width:460px;background:#19222c;border-left:1px solid #33445a;z-index:900;overflow-y:auto;box-shadow:-8px 0 32px rgba(0,0,0,.4);display:flex;flex-direction:column}
 .daypanel .dp-head{padding:16px 20px;border-bottom:1px solid #33445a;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
 .daypanel .dp-head h2{font-family:'EB Garamond',Georgia,serif;font-size:18px;color:#dcebf6;font-weight:400}
@@ -276,6 +277,7 @@ button,input,textarea,select{font-family:inherit}
 
   .stats{gap:12px;padding:10px}
   .stats .s .n{font-size:16px}
+  .stats .s .n .pc{font-size:11px;margin-left:5px}
   .hl-body{padding:4px 10px 12px}
   .toast{left:12px;right:12px;bottom:12px;text-align:center}
   .cat-row{flex-wrap:wrap}
@@ -831,6 +833,46 @@ function saveLinks(){
 var SHOT="Shot",PICKUP="Pickup";
 function isShot(s){return (s.status||[]).indexOf(SHOT)>=0}
 function needsPickup(s){return (s.status||[]).indexOf(PICKUP)>=0}
+
+/* ── PAGE WEIGHTS (hardcoded) ─────────────────────────────────
+   How much of the screenplay each sequence is, in script pages, so the Shot stats can
+   show "% of pages shot" as well as "% of sequences shot". Measured from "Project Hairpin
+   Gold Draft.docx" (saved 2026-10-09) paginated by Word: one page = 55 lines, a sequence
+   runs from its heading to the next one, and blank lines, scene gaps and page breaks
+   count. Act / Midpoint headings belong to the sequence that follows them; FADE IN to
+   SEQ 1. The key is the sequence number as the sheet writes it. The draft's second "45"
+   (KIM'S BETRAYAL) is SEQ 46 here, matching the sheet. 64 sequences, 92.602 pages.
+   The script is not changing, so these are fixed; if a sequence is added or renumbered,
+   add or edit its line here. A shot sequence missing from this table is listed in the
+   hover text of the Pages card instead of being silently dropped. */
+var SEQ_PAGES={
+  "1":1.545,"2":0.291,"3":3.673,"4":1.782,"5":1.909,"6":1.472,
+  "7":1.474,"8":2.946,"9":0.454,"10":1.327,"11":2.128,"12":2.236,
+  "13":1.327,"14":1.163,"15":0.800,"15.5":0.819,"16":1.454,"17":3.819,
+  "18":0.437,"19":2.127,"20":0.672,"21":0.183,"21.5":0.963,"22":3.218,
+  "23":0.454,"24":0.491,"24.5":0.255,"25":0.727,"26":0.180,"27":4.747,
+  "27.5":0.291,"28":0.381,"28.5":0.255,"29":0.545,"29.5":1.728,"30":0.146,
+  "30.5":0.655,"31":0.490,"32":0.945,"33":0.327,"33.5":1.164,"34":0.654,
+  "34.5":0.782,"35":2.436,"36":0.492,"37":3.710,"38":1.236,"39":4.236,
+  "40":1.109,"40.5":2.000,"41":4.946,"42":0.746,"43":1.000,"44":0.308,
+  "44.25":0.200,"44.5":0.746,"45":1.272,"46":2.346,"46.5":3.855,"47":1.381,
+  "48":1.109,"48.5":1.945,"49":2.746,"50":1.347
+};
+var SEQ_PAGES_TOTAL=(function(){var t=0;for(var k in SEQ_PAGES)if(SEQ_PAGES.hasOwnProperty(k))t+=SEQ_PAGES[k];return t})();
+function seqPageKey(s){var m=String(s.seq!=null&&s.seq!==""?s.seq:(s.seqLabel||"")).match(/[0-9]+(?:\.[0-9]+)?/);return m?String(parseFloat(m[0])):""}
+/** 0 -> "0%", all -> "100%", otherwise one decimal ("23.4%"). */
+function fmtPct(n,d){if(!d||!n)return"0%";if(n>=d-1e-9)return"100%";return(Math.round(n/d*1000)/10).toFixed(1)+"%"}
+/** Sequences shot + pages shot. A sequence counts as shot exactly when the Shot counter does (isShot). */
+function shotStats(){
+  var seen={},pg=0,unmapped=[],n=0;
+  for(var i=0;i<scenes.length;i++){
+    var s=scenes[i];if(!isShot(s))continue;n++;
+    var k=seqPageKey(s);
+    if(k&&SEQ_PAGES.hasOwnProperty(k)){if(!seen[k]){seen[k]=1;pg+=SEQ_PAGES[k]}}
+    else unmapped.push(s.seqLabel||s.seq||"?");
+  }
+  return {seqShot:n,seqTotal:scenes.length,pgShot:pg,pgTotal:SEQ_PAGES_TOTAL,unmapped:unmapped};
+}
 function splitNotes(notes){
   var lines=String(notes||"").split(/\r?\n/),pk=[],rest=[];
   for(var i=0;i<lines.length;i++){if(/^\s*pickup\s*:/i.test(lines[i]))pk.push(lines[i].replace(/^\s*pickup\s*:\s*/i,""));else rest.push(lines[i])}
@@ -1131,13 +1173,15 @@ function renderCal(){
     h+='</div>';
   }
   h+='</div>'+renderAgenda(HLON)+'<div class="stats">';
-  var shotCount=0,pkCount=0;for(var i=0;i<scenes.length;i++){if(isShot(scenes[i]))shotCount++;if(needsPickup(scenes[i]))pkCount++}
+  var pkCount=0;for(var i=0;i<scenes.length;i++){if(needsPickup(scenes[i]))pkCount++}
+  var ss=shotStats();
   var arr=[{v:shootDates().length,l:"Shoot Days",c:"#dcebf6"},
            {v:schedCount,l:"Scheduled",c:"#dcebf6"},
            {v:unschedCount,l:"Unscheduled",c:unschedCount?"#c49b2a":"#4a9e6e"},
-           {v:shotCount+" / "+scenes.length,l:"Shot",c:shotCount===scenes.length&&scenes.length?"#4a9e6e":"#dcebf6"},
+           {v:ss.seqShot+" / "+ss.seqTotal,pc:fmtPct(ss.seqShot,ss.seqTotal),l:"Sequences shot",c:ss.seqShot===ss.seqTotal&&ss.seqTotal?"#4a9e6e":"#dcebf6"},
+           {v:(Math.round(ss.pgShot*10)/10).toFixed(1)+" / "+(Math.round(ss.pgTotal*10)/10).toFixed(1),pc:fmtPct(ss.pgShot,ss.pgTotal),l:"Pages shot",c:ss.seqShot===ss.seqTotal&&ss.seqTotal?"#4a9e6e":"#dcebf6",t:"Script pages shot / total script pages (one page = 55 lines of the Gold Draft)."+(ss.unmapped.length?" Not in the page table, so not counted: "+ss.unmapped.join(", "):"")},
            {v:pkCount,l:"Pickups owed",c:pkCount?"#b39cff":"#55687a"}];
-  for(var i=0;i<arr.length;i++)h+='<div class="s"><div class="n" style="color:'+arr[i].c+'">'+arr[i].v+'</div><div class="l">'+arr[i].l+'</div></div>';
+  for(var i=0;i<arr.length;i++)h+='<div class="s"'+(arr[i].t?' title="'+esc(arr[i].t)+'"':'')+'><div class="n" style="color:'+arr[i].c+'">'+arr[i].v+(arr[i].pc?'<span class="pc">'+arr[i].pc+'</span>':'')+'</div><div class="l">'+arr[i].l+'</div></div>';
   h+='</div>'+renderHLBar();
   el.innerHTML=h;
 }
