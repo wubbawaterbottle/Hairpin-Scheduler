@@ -137,6 +137,12 @@ button,input,textarea,select{font-family:inherit}
 .shot-card .sc-bar i{display:block;height:100%;background:linear-gradient(90deg,#4f9fd8,#9fd0f0);border-radius:3px}
 .shot-card.done .sc-n,.shot-card.done .sc-pc{color:#4a9e6e}
 .shot-card.done .sc-bar i{background:#4a9e6e}
+.shot-card.total{flex:1.35 1 0;text-align:center;background:linear-gradient(180deg,rgba(79,159,216,.16),rgba(21,29,38,.6));border-color:#3b6f9a}
+.shot-card.total .sc-top{justify-content:center}
+.shot-card.total .sc-l{color:#a9c4d8}
+.shot-card.total .sc-n{font-size:26px;line-height:1.1;margin-top:2px}
+.shot-card .sc-sub{font-size:8px;color:#647789;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:640px){.shot-card:not(.total) .sc-top{flex-direction:column;align-items:flex-start;gap:0}.shot-card:not(.total) .sc-n{font-size:13px}.shot-card.total .sc-n{font-size:23px}.shot-card .sc-sub{font-size:7px}}
 @media(max-width:640px){.shot-strip{gap:6px;padding-top:6px}.shot-card{padding:5px 8px 6px}.shot-card .sc-l{font-size:7.5px;letter-spacing:.6px}.shot-card .sc-pc{font-size:12px}.shot-card .sc-n{font-size:15px}.shot-card .sc-bar{margin-top:4px}}
 .daypanel{position:fixed;right:0;top:0;bottom:0;width:460px;background:#19222c;border-left:1px solid #33445a;z-index:900;overflow-y:auto;box-shadow:-8px 0 32px rgba(0,0,0,.4);display:flex;flex-direction:column}
 .daypanel .dp-head{padding:16px 20px;border-bottom:1px solid #33445a;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
@@ -874,13 +880,16 @@ var SEQ_PAGES_TOTAL=(function(){var t=0;for(var k in SEQ_PAGES)if(SEQ_PAGES.hasO
 function seqPageKey(s){var m=String(s.seq!=null&&s.seq!==""?s.seq:(s.seqLabel||"")).match(/[0-9]+(?:\.[0-9]+)?/);return m?String(parseFloat(m[0])):""}
 /** 0 -> "0%", all -> "100%", otherwise one decimal ("23.4%"). */
 function fmtPct(n,d){if(!d||!n)return"0%";if(n>=d-1e-9)return"100%";return(Math.round(n/d*1000)/10).toFixed(1)+"%"}
-/** Sequences shot + pages shot. A sequence counts as shot exactly when the Shot counter does (isShot). */
+/** How much of a sequence is shot: 1 when marked Shot, 0.5 when marked Pickup (pickups are still owed), else 0. */
+function shotWeight(s){return needsPickup(s)?0.5:(isShot(s)?1:0)}
+function fmtN(x){return String(Math.round(x*10)/10)}
+/** Sequences shot + pages shot, both weighted by shotWeight (a Pickup sequence counts as half a sequence and half its pages). */
 function shotStats(){
   var seen={},pg=0,unmapped=[],n=0;
   for(var i=0;i<scenes.length;i++){
-    var s=scenes[i];if(!isShot(s))continue;n++;
+    var s=scenes[i],w=shotWeight(s);if(!w)continue;n+=w;
     var k=seqPageKey(s);
-    if(k&&SEQ_PAGES.hasOwnProperty(k)){if(!seen[k]){seen[k]=1;pg+=SEQ_PAGES[k]}}
+    if(k&&SEQ_PAGES.hasOwnProperty(k)){if(!seen[k]){seen[k]=1;pg+=SEQ_PAGES[k]*w}}
     else unmapped.push(s.seqLabel||s.seq||"?");
   }
   return {seqShot:n,seqTotal:scenes.length,pgShot:pg,pgTotal:SEQ_PAGES_TOTAL,unmapped:unmapped};
@@ -1146,8 +1155,10 @@ function renderShotStrip(){
     var done=d>0&&n>=d-1e-9,p=d>0?Math.min(100,n/d*100):0;
     return'<div class="shot-card'+(done?' done':'')+'" title="'+esc(tip)+'"><div class="sc-top"><span class="sc-l">'+label+'</span><span class="sc-pc">'+fmtPct(n,d)+'</span></div><div class="sc-n">'+frac+'</div><div class="sc-bar"><i style="width:'+p.toFixed(1)+'%"></i></div></div>'
   }
-  var pgTip="Script pages shot / total script pages (one page = 55 lines of the Gold Draft)."+(ss.unmapped.length?" Not in the page table, so not counted: "+ss.unmapped.join(", "):"");
-  el.innerHTML=card("Sequences shot",ss.seqShot+" / "+ss.seqTotal,ss.seqShot,ss.seqTotal,"Sequences marked Shot")
+  var pgTip="Script pages shot / total script pages (one page = 55 lines of the Gold Draft). A Pickup sequence counts half its pages."+(ss.unmapped.length?" Not in the page table, so not counted: "+ss.unmapped.join(", "):"");
+  var seqPc=ss.seqTotal>0?ss.seqShot/ss.seqTotal*100:0,pgPc=ss.pgTotal>0?ss.pgShot/ss.pgTotal*100:0,avgPc=(seqPc+pgPc)/2,allDone=avgPc>=100-1e-9;
+  var totalCard='<div class="shot-card total'+(allDone?' done':'')+'" title="'+esc("Total complete = the average of % of sequences shot ("+fmtPct(ss.seqShot,ss.seqTotal)+") and % of pages shot ("+fmtPct(ss.pgShot,ss.pgTotal)+")")+'"><div class="sc-top"><span class="sc-l">Total complete</span></div><div class="sc-n">'+fmtPct(avgPc,100)+'</div><div class="sc-sub">avg of sequences + pages</div><div class="sc-bar"><i style="width:'+Math.min(100,avgPc).toFixed(1)+'%"></i></div></div>';
+  el.innerHTML=card("Sequences shot",fmtN(ss.seqShot)+" / "+ss.seqTotal,ss.seqShot,ss.seqTotal,"Sequences marked Shot count 1, sequences marked Pickup count 0.5")+totalCard
     +card("Pages shot",(Math.round(ss.pgShot*10)/10).toFixed(1)+" / "+(Math.round(ss.pgTotal*10)/10).toFixed(1),ss.pgShot,ss.pgTotal,pgTip);
   el.hidden=false;fitHeader();
 }
