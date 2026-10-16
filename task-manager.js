@@ -321,7 +321,7 @@ function renderTaskManager(){
   var h='<div class="tm-shell"><div class="tm-toolbar"><div class="tm-subtabs">';
   for(var i=0;i<tabs.length;i++)h+='<button class="tm-subtab '+(tmView===tabs[i][0]?"active":"")+'" onclick="tmSetView(\''+tabs[i][0]+'\')"><span class="tm-long">'+tabs[i][1]+'</span><span class="tm-short">'+tabs[i][2]+'</span></button>';
   h+='</div><span class="tm-authority" title="Sequence records drive Scheduler and Calendar">Sequences → Scheduler → Calendar</span><span id="tmSaveState" class="tm-save"></span><input class="tm-search" value="'+tmAttr(tmQuery)+'" placeholder="Search" oninput="tmSetQuery(this.value)">';
-  h+='<button class="hbtn" onclick="loadProduction(true)" title="Re-download from the sheet">&#8635; Sync</button></div><div id="tmBody"></div></div>';
+  h+='<button class="hbtn" onclick="loadProduction(true)" title="Re-download from the sheet">'+ICON.refresh+' Sync</button></div><div id="tmBody"></div></div>';
   document.getElementById("taskManagerPage").innerHTML=h;renderTaskBody();
 }
 /* The page (#taskManagerPage) is the scroll container, not #tmBody — so keep and
@@ -638,9 +638,9 @@ function tmPopOpen(anchor,render){
   var left=Math.max(8,Math.min(r.left,window.innerWidth-w-8));
   var top=r.bottom+6;if(top+hgt>window.innerHeight-8)top=Math.max(8,r.top-hgt-6);
   el.style.left=left+"px";el.style.top=top+"px";
-  setTimeout(function(){var f=el.querySelector("[autofocus]");if(f)f.focus()},30);
+  setTimeout(function(){var f=el.querySelector("[autofocus]");if(f)f.focus({preventScroll:true})},30);
 }
-function tmPopRender(){var el=document.getElementById("tmPop");if(!el||!tmPopState)return;var q=el.querySelector(".tm-pop-search");var qv=q?q.value:null,sel=q?q.selectionStart:0;el.innerHTML=tmPopState.render();var q2=el.querySelector(".tm-pop-search");if(q2&&qv!==null){q2.value=qv;try{q2.setSelectionRange(sel,sel)}catch(e){}q2.focus()}}
+function tmPopRender(){var el=document.getElementById("tmPop");if(!el||!tmPopState)return;var q=el.querySelector(".tm-pop-search");var qv=q?q.value:null,sel=q?q.selectionStart:0;el.innerHTML=tmPopState.render();var q2=el.querySelector(".tm-pop-search");if(q2&&qv!==null){q2.value=qv;try{q2.setSelectionRange(sel,sel)}catch(e){}q2.focus({preventScroll:true})}}
 document.addEventListener("click",function(e){var p=document.getElementById("tmPop");if(p&&!p.contains(e.target))tmPopClose()});
 document.addEventListener("keydown",function(e){if(e.key==="Escape")tmPopClose()});
 var tmPopQuery="";
@@ -982,7 +982,7 @@ function openPersonEditor(id){
     h+=tmActive(p)?'<button class="mbtn ghost tm-danger" onclick="tmRemovePerson(\''+tmAttr(id)+'\')">Remove from project</button>':'<button class="mbtn ghost" onclick="tmRestorePerson(\''+tmAttr(id)+'\')">Restore</button>';
   }
   h+='<span class="tm-spacer"></span><button class="mbtn ghost" onclick="tmClose()">Cancel</button><button class="mbtn gold" onclick="savePersonEditor(\''+tmAttr(id||"")+'\')">'+(isNew?'Add person':'Save')+'</button></div>';
-  tmModal(h);if(isNew)setTimeout(function(){var el=document.getElementById("personName");if(el)el.focus()},60);
+  tmModal(h);if(isNew)setTimeout(function(){var el=document.getElementById("personName");if(el)el.focus({preventScroll:true})},60);
 }
 function tmReadPersonForm(base){
   return Object.assign({},base,{NAME:tmVal("personName"),GROUPS:tmVal("personGroups"),PROJECT_STATUS:tmVal("personProject"),CONTRACT_STATUS:tmVal("personContract"),CONTRACT_VERSION:tmVal("personVersion"),ROLES_CHARACTERS:tmVal("personRole"),PHONE:tmVal("personPhone"),EMAIL:tmVal("personEmail"),AVAILABILITY:tmVal("personAvail"),COSTUME_NOTES:tmVal("personCostume"),NOTES:tmVal("personNotes")});
@@ -1053,7 +1053,7 @@ function openReplacePerson(oldId){
   h+='<div class="tm-actions"><button class="mbtn ghost" onclick="openPersonEditor(\''+tmAttr(oldId)+'\')">Back</button><span class="tm-spacer"></span><button class="mbtn gold" onclick="runReplacePerson(\''+tmAttr(oldId)+'\')">Replace'+(rows.length?' in '+rows.length+' scene'+(rows.length===1?'':'s'):'')+'</button></div>';
   tmModal(h);tmReplaceMode();
 }
-function tmReplaceMode(){var m=document.querySelector('input[name=rpMode]:checked');var isNew=m&&m.value==="new";document.getElementById("rpExisting").style.display=isNew?"none":"";document.getElementById("rpNew").style.display=isNew?"":"none";if(isNew)setTimeout(function(){var el=document.getElementById("rpName");if(el)el.focus()},40)}
+function tmReplaceMode(){var m=document.querySelector('input[name=rpMode]:checked');var isNew=m&&m.value==="new";document.getElementById("rpExisting").style.display=isNew?"none":"";document.getElementById("rpNew").style.display=isNew?"":"none";if(isNew)setTimeout(function(){var el=document.getElementById("rpName");if(el)el.focus({preventScroll:true})},40)}
 function runReplacePerson(oldId){
   var old=tmPerson(oldId);if(!old)return;
   var m=document.querySelector('input[name=rpMode]:checked'),isNew=m&&m.value==="new";
@@ -1113,7 +1113,7 @@ function tmRenderLinkList(){
 }
 function tmPickLink(type,id){tmLinkDraft={type:type,id:id};tmRenderLinkList();tmRenderLinkNow()}
 function tmClearLink(){tmLinkDraft={type:"",id:""};tmRenderLinkList();tmRenderLinkNow()}
-function tmLinkTypeChanged(){var t=tmVal("taskLinkType");if(t!==tmLinkDraft.type)tmLinkDraft={type:t,id:""};var s=document.getElementById("taskLinkSearch");if(s){s.value="";s.focus()}tmRenderLinkList();tmRenderLinkNow()}
+function tmLinkTypeChanged(){var t=tmVal("taskLinkType");if(t!==tmLinkDraft.type)tmLinkDraft={type:t,id:""};var s=document.getElementById("taskLinkSearch");if(s){s.value="";s.focus({preventScroll:true})}tmRenderLinkList();tmRenderLinkNow()}
 function tmRenderLinkNow(){
   var el=document.getElementById("taskLinkNow");if(!el)return;
   var scene=tmVal("taskScene");
@@ -1142,7 +1142,7 @@ function openTaskEditor(id,seed,assignee){
   h+='<div class="tm-field"><label class="tm-toggle"><input id="taskDone" type="checkbox" '+(tmBool(t.DONE)?'checked':'')+'> Done</label></div></div>';
   h+='<div class="tm-actions">'+(existing?'<button class="mbtn ghost tm-danger" onclick="deleteTaskEditor(\''+tmAttr(t.TASK_ID)+'\')">Delete</button>':'')+'<span class="tm-spacer"></span><button class="mbtn ghost" onclick="tmClose()">Cancel</button><button class="mbtn gold" id="taskSaveBtn" onclick="saveTaskEditor(\''+tmAttr(t.TASK_ID||"")+'\')">Save</button></div>';
   tmModal(h);tmRenderLinkList();tmRenderLinkNow();
-  setTimeout(function(){var el=document.getElementById("taskTitle");if(el&&!existing)el.focus()},60);
+  setTimeout(function(){var el=document.getElementById("taskTitle");if(el&&!existing)el.focus({preventScroll:true})},60);
 }
 function saveTaskEditor(id){
   var current=id?tmById(production.tasks,"TASK_ID",id):{};
@@ -1161,3 +1161,6 @@ function deleteTaskEditor(id){
 }
 
 updateToday();setInterval(updateToday,60000);
+
+// Redraws keep every scroll position (helper lives in index.html, 2026-10-16).
+if(window.keepScrollOn)keepScrollOn(["renderTaskManager","renderTaskBody","tmModal","tmPopRender","tmRefreshSceneRow","tmRefreshItemRows","tmRefreshSceneNotes"]);
